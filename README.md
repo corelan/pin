@@ -13,8 +13,8 @@ https://software.intel.com/en-us/articles/pintool-downloads
 
 ## Creating a new Pin project folder for use with Visual Studio
 
-This repository contains a simple python script @createpintool.py@ that allows you to create a new Visual Studio project folder, based on the "MyPinTool" example folder.
-You can find the script in the @win32@ folder in this repository.
+This repository contains a simple python script `createpintool.py` that allows you to create a new Visual Studio project folder, based on the "MyPinTool" example folder.
+You can find the script in the `win32` folder in this repository.
 
 Place the script into the source/tools folder inside your pin folder structure.
 Run the script from that working folder, and specify the name of the new project.
