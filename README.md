@@ -5,3 +5,6 @@ Unless stated otherwise, all pin tools were created with Visual Studio C++ 2012 
 
 To download & install the corresponding version of Pin, check this link:
 https://software.intel.com/en-us/articles/pintool-downloads
+
+Hint: For Visual Studio C++ 2012, you need vc11, not vc12!
+Hint2: You may have to disable SAFESEH.
