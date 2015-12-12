@@ -4,7 +4,8 @@ Collection of pin tools
 
 ## General information
 
-Unless stated otherwise, all pin tools were created with Visual Studio C++ 2012 Express.
+Unless stated otherwise, all pin tools were created with Visual Studio 2012 Express, and written in C++
+You can download Visual Studio Express 2012 for Windows Desktop here: https://www.microsoft.com/en-us/download/details.aspx?id=34673
 
 To download & install the corresponding version of Pin, check this link:
 https://software.intel.com/en-us/articles/pintool-downloads
@@ -36,4 +37,4 @@ C:\pin\vc11\source\tools>python createpintool.py MyNewProjectName
 ## Notes
 
 1. For Visual Studio C++ 2012, you need vc11, not vc12!<br>
-2: You may have to disable SAFESEH.
+2. You may have to disable SAFESEH.
