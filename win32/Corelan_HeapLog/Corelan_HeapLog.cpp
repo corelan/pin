@@ -71,7 +71,7 @@ public:
 
 	void save_to_log()
 	{
-		fprintf(LogFile, "** Module %s loaded  (0x%p -> 0x%p)**\n", ImageName, ImageBase, ImageEnd);
+		fprintf(LogFile, "** Module %s loaded at 0x%p**\n", ImageName, ImageBase);
 	}
 };
 
@@ -97,6 +97,10 @@ public:
 		{
 			fprintf(LogFile, "PID: %u | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 		}
+		else if (operation_type ==  "virtualalloc")
+		{
+			fprintf(LogFile, "PID: %u | virtualalloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+		}
 		else if (operation_type == "rtlfreeheap")
 		{
 			fprintf(LogFile, "PID: %u | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
@@ -108,14 +112,13 @@ public:
 vector<HeapOperation> arrAllOperations;
 vector<ModuleImage> arrLoadedModules;
 
-std::map<string, ModuleImage> imageinfo;
 
 /* ===================================================================== */
 // Command line switches
 /* ===================================================================== */
 
 KNOB<BOOL>   KnobLogAlloc(KNOB_MODE_WRITEONCE,  "pintool",
-	"logalloc", "1", "Log heap allocations (RtlAllocateHeap and RtlReAllocateHeap)");
+	"logalloc", "1", "Log heap allocations (RtlAllocateHeap, RtlReAllocateHeap and VirtualAlloc)");
 
 KNOB<BOOL>   KnobLogFree(KNOB_MODE_WRITEONCE,  "pintool",
 	"logfree", "1", "Log heap free operations (RtlFreeHeap)");
@@ -148,12 +151,10 @@ WINDOWS::DWORD findSize(ADDRINT address)
 
 ModuleImage addModuleToArray(IMG img)
 {
-	SEC sec = IMG_SecHead(img);
 	ModuleImage modimage;
 	modimage.ImageName = IMG_Name(img);
-	modimage.ImageBase = IMG_StartAddress(img);
 	modimage.ImageEnd = IMG_HighAddress(img);
-	imageinfo[modimage.ImageName] = modimage;
+	modimage.ImageBase = IMG_LowAddress(img);
 	arrLoadedModules.push_back(modimage);
 	return modimage;
 }
@@ -250,6 +251,42 @@ VOID CaptureRtlReAllocateHeapAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 		chunksizes[addr] = size;
 
 	}
+}
+
+
+VOID CaptureVirtualAllocBefore(THREADID tid, int size, int flProtect)
+{
+	// At start of function, simply remember the requested size in TLS
+	PIN_SetThreadData(alloc_key, (void *) size, tid);
+}
+
+
+VOID CaptureVirtualAllocAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
+{
+	// At end of function restore requested size and save data
+	// avoid noise
+		
+	//restore size argument that was stored at start of function
+	int size = (int) PIN_GetThreadData(alloc_key, tid);
+		
+	// create new object
+	HeapOperation ho_alloc;
+	ho_alloc.operation_type = "virtualalloc";
+	ho_alloc.chunk_start = addr;
+	ho_alloc.chunk_size = size;
+	ho_alloc.chunk_end = addr + size;
+	ho_alloc.saved_return_pointer = caller;
+	ho_alloc.operation_timestamp = time(0);
+	string imagename = getModuleImageNameByAddress(caller);
+	ho_alloc.srp_imagename = imagename;
+
+	ho_alloc.save_to_log();
+
+	arrAllOperations.push_back(ho_alloc);
+	// add to map chunksizes
+	chunksizes[addr] = size;
+
+
 }
 
 
@@ -362,6 +399,35 @@ VOID AddInstrumentation(IMG img, VOID *v)
 			}
 		}
 
+		//  Find the VirtualAlloc() function.
+		else if (undFuncName == "VirtualAlloc" && LogAlloc)
+		{
+			RTN vaallocRtn = RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
+            
+			if (RTN_Valid(vaallocRtn))
+			{
+				// Instrument to capture allocation address and original function arguments
+				// at end of the VirtualAlloc function
+
+				RTN_Open(vaallocRtn);
+
+				fprintf(LogFile,"Adding instrumentation for VirtualAlloc (0x%p)\n", vaallocRtn);
+				// lpAddress
+				// dwSize
+				// flAllocationType
+				// flProtect
+				RTN_InsertCall(vaallocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureVirtualAllocBefore,
+					IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
+					IARG_FUNCARG_ENTRYPOINT_VALUE, 3, IARG_END);
+
+				// return value is the address that has been allocated
+				RTN_InsertCall(vaallocRtn, IPOINT_AFTER, (AFUNPTR) &CaptureVirtualAllocAfter,
+					IARG_THREAD_ID, IARG_FUNCRET_EXITPOINT_VALUE, IARG_G_ARG0_CALLER, IARG_END);
+
+				RTN_Close(vaallocRtn);
+			}
+		}
+
 
 		//  Find the RtlFreeHeap() function.
 		else if (undFuncName == "RtlFreeHeap" && LogFree)
@@ -390,7 +456,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 BOOL FollowChild(CHILD_PROCESS childProcess, VOID * userData)
 {
-	fprintf(LogFile, "\n*******************************\nCreating child process %u\n*******************************\n\n", PIN_GetPid());
+	fprintf(LogFile, "\n*******************************\nCreating child process from parent PID %u\n*******************************\n\n", PIN_GetPid());
 	return true;
 }
 

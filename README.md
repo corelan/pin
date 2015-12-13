@@ -41,6 +41,7 @@ C:\pin\vc11\source\tools>python createpintool.py MyNewProjectName
 3. All pintools must be considered "proof of concept" and come without any warranty whatsoever.  The pintools have only been tested in a very small number of situations and may not work on your system. I do, however, encourage everyone to improve the code, performance, stability and/or submit Pull Requests to add interesting functionality.
 4. I have compiled all pin tools in "Debug" mode.
 5. If your pin tool doesn't run (i.e. if it terminates almost immediately after launching it), launch pin with the `-xyzzy -mesgon log_win` options, to activate some verbose logging.  Open `pintool.log` for info.
+6. The Corelan_HeapLog pin tool doesn't always end up launching the process.  Try again after a few seconds and it should work. (Weird error in pin.log. Not sure what to do with it).
 
 ## Available pintools in this repository
 
