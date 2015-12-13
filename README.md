@@ -40,15 +40,16 @@ C:\pin\vc11\source\tools>python createpintool.py MyNewProjectName
 2. You may have to disable SAFESEH.
 3. All pintools must be considered "proof of concept" and come without any warranty whatsoever.  The pintools have only been tested in a very small number of situations and may not work on your system. I do, however, encourage everyone to improve the code, performance, stability and/or submit Pull Requests to add interesting functionality.
 4. I have compiled all pin tools in "Debug" mode.
-5. If your pin tool doesn't run (i.e. if it terminates almost immediately after launching it), launch pin with the `-xyzzy -mesgon log_win` options, to activate some verbose logging.  Open `pintool.log` for info.
+5. If your pin tool doesn't run (i.e. if it terminates almost immediately after launching it), launch pin with the `-xyzzy -mesgon log_win` options, to activate some verbose logging.  A file `pintool.log` will be created in case of C++ errors.
 6. The Corelan_HeapLog pin tool doesn't always end up launching the process.  Try again after a few seconds and it should work. (Weird error in pin.log. Not sure what to do with it).
+7. Remove *.log files before running the Corelan_HeapLog pin tool again. Also, make sure any relevant previous processes are killed before launching a new pin instance.
 
 ## Available pintools in this repository
 
 ### 1. Corelan_HeapLog
 This pintool allows you to log all calls to RtlAllocateHeap, RtlReAllocateHeap, VirtualAlloc and RtlFreeHeap.<br>
-Output is written to `corelan_heaplog_<pid>.log`.
-(Fresh file for every process)
+Output is written to `corelan_heaplog_<pid>.log` (Fresh file for every process).<br>
+Exceptions are written to `corelan_heaplog_exception.log` (One file, exceptions are appended to this file)
 
 You can specify 2 command line options: <br>
 `-logalloc <value>`  : enable or disable logging allocations by setting value to 1 or 0<br>

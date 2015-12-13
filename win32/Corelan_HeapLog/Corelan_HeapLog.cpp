@@ -46,7 +46,6 @@ namespace WINDOWS
 #include <map>
 #include <ctime>
 
-
 /* ================================================================== */
 // Global variables 
 /* ================================================================== */
@@ -57,6 +56,7 @@ BOOL LogFree = true;
 BOOL ShowTimeStamp = false;
 TLS_KEY alloc_key;
 FILE* LogFile;
+FILE* ExceptionLogFile;
 std::map<ADDRINT,WINDOWS::DWORD> chunksizes;
 
 /* ================================================================== */
@@ -72,7 +72,7 @@ public:
 
 	void save_to_log()
 	{
-		fprintf(LogFile, "** Module %s loaded at 0x%p**\n", ImageName, ImageBase);
+		std::fprintf(LogFile, "** Module %s loaded at 0x%p**\n", ImageName, ImageBase);
 	}
 };
 
@@ -104,26 +104,30 @@ public:
 		}
 		if (operation_type ==  "rtlallocateheap")
 		{
-			fprintf(LogFile, "PID: %u | %s | alloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+			std::fprintf(LogFile, "PID: %u | %s | alloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 		}
 		else if (operation_type ==  "rtlreallocateheap")
 		{
-			fprintf(LogFile, "PID: %u | %s | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+			std::fprintf(LogFile, "PID: %u | %s | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 		}
 		else if (operation_type ==  "virtualalloc")
 		{
-			fprintf(LogFile, "PID: %u | %s | virtualalloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+			std::fprintf(LogFile, "PID: %u | %s | virtualalloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 		}
 		else if (operation_type == "rtlfreeheap")
 		{
-			fprintf(LogFile, "PID: %u | %s | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid,ascii_time, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
+			std::fprintf(LogFile, "PID: %u | %s | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid,ascii_time, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
 		}
 	}
 
 };
 
+
+// more globals
+
 vector<HeapOperation> arrAllOperations;
 vector<ModuleImage> arrLoadedModules;
+
 
 
 /* ===================================================================== */
@@ -148,6 +152,22 @@ INT32 Usage()
 
 	return -1;
 }
+
+void CloseLogFile()
+{
+	std::fprintf(LogFile, "\n############## EOF\n");
+	fflush(LogFile);
+	fclose(LogFile);
+}
+
+void CloseExceptionLogFile()
+{
+	std::fprintf(ExceptionLogFile,"Closing exception log file for PID %u\n", PIN_GetPid());
+	std::fprintf(ExceptionLogFile, "############## EOF\n");
+	fflush(ExceptionLogFile);
+	fclose(ExceptionLogFile);
+}
+
 
 
 WINDOWS::DWORD findSize(ADDRINT address)
@@ -190,6 +210,36 @@ string getModuleImageNameByAddress(ADDRINT address)
 }
 
 
+string getAddressInfo(ADDRINT address)
+{
+	stringstream ss;
+	string info = "";
+	string modulename = "";
+	if (address > 0)
+	{
+		// check if address belongs to module or is part of heap
+		modulename = getModuleImageNameByAddress(address);
+		if (!modulename.empty())
+		{
+			ss << "(" << modulename << ")";
+			info = ss.str();
+		}
+		else
+		{
+			ss << "";
+			for (HeapOperation op : arrAllOperations)
+			{
+				if (op.chunk_start <= address && address <= op.chunk_end)
+				{
+					ss << op.operation_type << "(0x" << std::hex << op.chunk_size << ") ";
+				}
+			}
+			info = ss.str();
+		}
+	}
+	return info;
+}
+
 /* ===================================================================== */
 // Analysis routines (runtime)
 /* ===================================================================== */
@@ -229,7 +279,6 @@ VOID CaptureRtlAllocateHeapAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 
 	}
 }
-
 
 
 VOID CaptureRtlReAllocateHeapBefore(THREADID tid, UINT32 flags, int size)
@@ -370,7 +419,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(allocRtn);
 
-				fprintf(LogFile,"Adding instrumentation for RtlAllocateHeap (0x%p)\n", allocRtn);
+				std::fprintf(LogFile,"Adding instrumentation for RtlAllocateHeap (0x%p)\n", allocRtn);
                 
 				RTN_InsertCall(allocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlAllocateHeapBefore,
 					IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
@@ -380,7 +429,6 @@ VOID AddInstrumentation(IMG img, VOID *v)
 				RTN_InsertCall(allocRtn, IPOINT_AFTER, (AFUNPTR) &CaptureRtlAllocateHeapAfter,
 					IARG_THREAD_ID, IARG_FUNCRET_EXITPOINT_VALUE, IARG_G_ARG0_CALLER, IARG_END);
 
-         
 				RTN_Close(allocRtn);
 			}
 		}
@@ -397,7 +445,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(reallocRtn);
 
-				fprintf(LogFile,"Adding instrumentation for RtlReAllocateHeap (0x%p)\n", reallocRtn);
+				std::fprintf(LogFile,"Adding instrumentation for RtlReAllocateHeap (0x%p)\n", reallocRtn);
 				// HeapHandle
 				// Flags
 				// MemoryPointer
@@ -426,7 +474,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(vaallocRtn);
 
-				fprintf(LogFile,"Adding instrumentation for VirtualAlloc (0x%p)\n", vaallocRtn);
+				std::fprintf(LogFile,"Adding instrumentation for VirtualAlloc (0x%p)\n", vaallocRtn);
 				// lpAddress
 				// dwSize
 				// flAllocationType
@@ -453,7 +501,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 			{
 				RTN_Open(freeRtn);
 
-				fprintf(LogFile,"Adding instrumentation for RtlFreeHeap (0x%p)\n", freeRtn);
+				std::fprintf(LogFile,"Adding instrumentation for RtlFreeHeap (0x%p)\n", freeRtn);
                 
 				RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlFreeHeapBefore,
 					IARG_FUNCARG_ENTRYPOINT_VALUE, 2,	// address
@@ -469,9 +517,65 @@ VOID AddInstrumentation(IMG img, VOID *v)
 }
 
 
+VOID LogContext(const CONTEXT *ctxt)
+{
+	std::fprintf(ExceptionLogFile, "PID %u | Exception context:\n", PIN_GetPid());
+	ADDRINT EIP = PIN_GetContextReg( ctxt, REG_INST_PTR );
+	ADDRINT EAX = PIN_GetContextReg( ctxt, REG_EAX );
+	ADDRINT EBX = PIN_GetContextReg( ctxt, REG_EBX );
+	ADDRINT ECX = PIN_GetContextReg( ctxt, REG_ECX );
+	ADDRINT EDX = PIN_GetContextReg( ctxt, REG_EDX );
+	ADDRINT ESP = PIN_GetContextReg( ctxt, REG_ESP );
+	ADDRINT EBP = PIN_GetContextReg( ctxt, REG_EBP );
+	ADDRINT ESI = PIN_GetContextReg( ctxt, REG_ESI );
+	ADDRINT EDI = PIN_GetContextReg( ctxt, REG_EDI );
+
+	string EIPinfo = getAddressInfo(EIP);
+	string EAXinfo = getAddressInfo(EAX);
+	string EBXinfo = getAddressInfo(EBX);
+	string ECXinfo = getAddressInfo(ECX);
+	string EDXinfo = getAddressInfo(EDX);
+	string EBPinfo = getAddressInfo(EBP);
+	string ESPinfo = getAddressInfo(ESP);
+	string ESIinfo = getAddressInfo(ESI);
+	string EDIinfo = getAddressInfo(EDI);
+
+	std::fprintf(ExceptionLogFile, "EIP: 0x%p %s\n", EIP, EIPinfo);
+	std::fprintf(ExceptionLogFile, "EAX: 0x%p %s\n", EAX, EAXinfo);
+	std::fprintf(ExceptionLogFile, "EBX: 0x%p %s\n", EBX, EBXinfo);
+	std::fprintf(ExceptionLogFile, "ECX: 0x%p %s\n", ECX, ECXinfo);
+	std::fprintf(ExceptionLogFile, "EDX: 0x%p %s\n", EDX, EDXinfo);
+	std::fprintf(ExceptionLogFile, "EBP: 0x%p %s\n", EBP, EBPinfo);
+	std::fprintf(ExceptionLogFile, "ESP: 0x%p %s\n", ESP, ESPinfo);
+	std::fprintf(ExceptionLogFile, "ESI: 0x%p %s\n", ESI, ESIinfo);
+	std::fprintf(ExceptionLogFile, "EDI: 0x%p %s\n", EDI, EDIinfo);
+	std::fprintf(ExceptionLogFile, "\n");
+}
+
+
+
+VOID OnException(THREADID threadIndex, CONTEXT_CHANGE_REASON reason, const CONTEXT *ctxtFrom, CONTEXT *ctxtTo, INT32 info, VOID *v)
+{
+	if (reason != CONTEXT_CHANGE_REASON_EXCEPTION)
+		return;
+
+	UINT32 exceptionCode = info;
+	ADDRINT	address = PIN_GetContextReg(ctxtFrom, REG_INST_PTR);
+	std::fprintf(LogFile, "\n\n*** Exception at 0x%p, code 0x%x ***\n", address, exceptionCode);
+	if ((exceptionCode >= 0xc0000000) && (exceptionCode <= 0xcfffffff))
+	{
+		std::fprintf(LogFile, "%s\n", "For more info about this exception, see exception log file ***");
+		LogContext(ctxtFrom);
+		CloseExceptionLogFile();
+		CloseLogFile();
+		PIN_ExitProcess(-1);
+	}
+}
+
+
 BOOL FollowChild(CHILD_PROCESS childProcess, VOID * userData)
 {
-	fprintf(LogFile, "\n*******************************\nCreating child process from parent PID %u\n*******************************\n\n", PIN_GetPid());
+	std::fprintf(LogFile, "\n*******************************\nCreating child process from parent PID %u\n*******************************\n\n", PIN_GetPid());
 	return true;
 }
 
@@ -479,9 +583,8 @@ BOOL FollowChild(CHILD_PROCESS childProcess, VOID * userData)
 
 VOID Fini(INT32 code, VOID *v)
 {
-	fprintf(LogFile,"\n\nNumber of heap operations logged: %d\n",arrAllOperations.size());
-	fprintf(LogFile, "# EOF\n");
-	fclose(LogFile);
+	std::fprintf(LogFile,"\n\nNumber of heap operations logged: %d\n",arrAllOperations.size());
+	CloseLogFile();
 }
 
 
@@ -498,13 +601,15 @@ int main(int argc, char *argv[])
 	ss << currentpid;
 	ss << ".log";
 	string fileName = ss.str();
+
 	LogAlloc = KnobLogAlloc.Value();
 	LogFree = KnobLogFree.Value();
 	ShowTimeStamp = KnowShowTimeStamp.Value(); 
 
-	if (!fileName.empty()) { LogFile = fopen(fileName.c_str(),"wb");}
+	if (!fileName.empty()) { LogFile = fopen(fileName.c_str(),"w+");}
+	ExceptionLogFile = fopen("corelan_heaplog_exception.log","a+");
 
-	fprintf(LogFile, "Instrumentation started\n");
+	std::fprintf(LogFile, "Instrumentation started\n");
 
 	PIN_InitSymbols();
 
@@ -515,20 +620,20 @@ int main(int argc, char *argv[])
 
 	if (LogAlloc)
 	{
-		fprintf(LogFile, "Logging heap alloc: YES\n");
+		std::fprintf(LogFile, "Logging heap alloc: YES\n");
 	}
 	else
 	{
-		fprintf(LogFile, "Logging heap alloc: NO\n");
+		std::fprintf(LogFile, "Logging heap alloc: NO\n");
 	}
 
 	if (LogFree)
 	{
-		fprintf(LogFile, "Logging heap free: YES\n");
+		std::fprintf(LogFile, "Logging heap free: YES\n");
 	}
 	else
 	{
-		fprintf(LogFile, "Logging heap free: NO\n");
+		std::fprintf(LogFile, "Logging heap free: NO\n");
 	}
 
 
@@ -546,7 +651,10 @@ int main(int argc, char *argv[])
 		PIN_AddFiniFunction(Fini, 0);
 	}
 
-	fprintf(LogFile, "==========================================\n\n");
+	//Handle exceptions
+	PIN_AddContextChangeFunction(OnException, 0);
+
+	std::fprintf(LogFile, "==========================================\n\n");
 
 	// Start the program, never returns
 	PIN_StartProgram();
