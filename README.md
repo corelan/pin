@@ -36,5 +36,24 @@ C:\pin\vc11\source\tools>python createpintool.py MyNewProjectName
 
 ## Notes
 
-1. For Visual Studio C++ 2012, you need vc11, not vc12!<br>
+1. For Visual Studio C++ 2012, you need vc11, not vc12!
 2. You may have to disable SAFESEH.
+3. All pintools must be considered "proof of concept" and come without any warranty whatsoever.  The pintools have only been tested in a very small number of situations and may not work on your system. I do, however, encourage everyone to improve the code, performance, stability and/or submit Pull Requests to add interesting functionality.
+4. I have compiled all pin tools in "Debug" mode.
+
+## Available pintools in this repository
+
+### 1. Corelan_HeapLog
+This pintool allows you to log all calls to RtlAllocateHeap and RtlFreeHeap.<br>
+Output is written to corelan_heaplog_<pid>.log.
+
+You can specify 2 command line options: <br>
+`-logalloc <value>` : enable or disable logging allocations by setting value to 1 or 0<br>
+`-logfree <value>` :  enable or disable logging allocations by setting value to 1 or 0<br>
+
+The pintool *should* be capable of instrumenting child processes, provided that you have specified the `-follow-execv` pin command line option.
+
+Example:
+```C:\pin\vc11>pin -follow-execv -t c:\pin\vc11\source\tools\Corelan_HeapLog\Debug\Corelan_HeapLog.dll -- "c:\Program Files (x86)\Internet Explorer\iexplore.exe" h
+ttp://127.0.0.1:8080/blah.html```
+
