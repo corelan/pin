@@ -58,7 +58,6 @@ Both log settings are enabled by default. Timestamp is disabled by default (as i
 
 The pintool *should* be capable of instrumenting child processes, provided that you have specified the `-follow-execv` pin command line option.
 
-Example:
-```C:\pin\vc11>pin -follow-execv -t c:\pin\vc11\source\tools\Corelan_HeapLog\Debug\Corelan_HeapLog.dll -timestamp 1 -logfree 0 -- "c:\Program Files (x86)\Internet Explorer\iexplore.exe" h
-ttp://127.0.0.1:8080/blah.html```
+Example:<br>
+```C:\pin\vc11>pin -follow-execv -t c:\pin\vc11\source\tools\Corelan_HeapLog\Debug\Corelan_HeapLog.dll -timestamp 1 -logfree 0 -- "c:\Program Files (x86)\Internet Explorer\iexplore.exe" http://127.0.0.1:8080/blah.html```
 
