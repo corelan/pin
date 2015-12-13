@@ -51,13 +51,14 @@ Output is written to `corelan_heaplog_<pid>.log`.
 (Fresh file for every process)
 
 You can specify 2 command line options: <br>
-`-logalloc <value>` : enable or disable logging allocations by setting value to 1 or 0<br>
-`-logfree <value>` :  enable or disable logging free operations by setting value to 1 or 0<br>
-Both settings are enabled by default.
+`-logalloc <value>`  : enable or disable logging allocations by setting value to 1 or 0<br>
+`-logfree <value>`   : enable or disable logging free operations by setting value to 1 or 0<br>
+`-timestamp <value>` : enable or disable showing timestamp of heap operation by setting value to 1 or 0<br>
+Both log settings are enabled by default. Timestamp is disabled by default (as it may slow down the process a tiny little bit).
 
 The pintool *should* be capable of instrumenting child processes, provided that you have specified the `-follow-execv` pin command line option.
 
 Example:
-```C:\pin\vc11>pin -follow-execv -t c:\pin\vc11\source\tools\Corelan_HeapLog\Debug\Corelan_HeapLog.dll -- "c:\Program Files (x86)\Internet Explorer\iexplore.exe" h
+```C:\pin\vc11>pin -follow-execv -t c:\pin\vc11\source\tools\Corelan_HeapLog\Debug\Corelan_HeapLog.dll -timestamp 1 -logfree 0 -- "c:\Program Files (x86)\Internet Explorer\iexplore.exe" h
 ttp://127.0.0.1:8080/blah.html```
 

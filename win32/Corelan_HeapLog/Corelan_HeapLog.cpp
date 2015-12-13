@@ -54,6 +54,7 @@ namespace WINDOWS
 
 BOOL LogAlloc = true;
 BOOL LogFree = true;
+BOOL ShowTimeStamp = false;
 TLS_KEY alloc_key;
 FILE* LogFile;
 std::map<ADDRINT,WINDOWS::DWORD> chunksizes;
@@ -89,21 +90,33 @@ public:
 	void save_to_log()
 	{
 		int currentpid = PIN_GetPid();
+		char * ascii_time;
+		if (ShowTimeStamp)
+		{
+			struct tm * timeinfo;
+			time ( & operation_timestamp );
+			timeinfo = localtime ( & operation_timestamp);
+			ascii_time = strtok(asctime(timeinfo),"\n");
+		}
+		else
+		{
+			ascii_time = "";
+		}
 		if (operation_type ==  "rtlallocateheap")
 		{
-			fprintf(LogFile, "PID: %u | alloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+			fprintf(LogFile, "PID: %u | %s | alloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 		}
 		else if (operation_type ==  "rtlreallocateheap")
 		{
-			fprintf(LogFile, "PID: %u | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+			fprintf(LogFile, "PID: %u | %s | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 		}
 		else if (operation_type ==  "virtualalloc")
 		{
-			fprintf(LogFile, "PID: %u | virtualalloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+			fprintf(LogFile, "PID: %u | %s | virtualalloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 		}
 		else if (operation_type == "rtlfreeheap")
 		{
-			fprintf(LogFile, "PID: %u | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
+			fprintf(LogFile, "PID: %u | %s | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid,ascii_time, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
 		}
 	}
 
@@ -123,6 +136,8 @@ KNOB<BOOL>   KnobLogAlloc(KNOB_MODE_WRITEONCE,  "pintool",
 KNOB<BOOL>   KnobLogFree(KNOB_MODE_WRITEONCE,  "pintool",
 	"logfree", "1", "Log heap free operations (RtlFreeHeap)");
 
+KNOB<BOOL>   KnowShowTimeStamp(KNOB_MODE_WRITEONCE,  "pintool",
+	"timestamp", "0", "Show timestamps in output");
 
 /* ===================================================================== */
 // Utilities
@@ -485,6 +500,7 @@ int main(int argc, char *argv[])
 	string fileName = ss.str();
 	LogAlloc = KnobLogAlloc.Value();
 	LogFree = KnobLogFree.Value();
+	ShowTimeStamp = KnowShowTimeStamp.Value(); 
 
 	if (!fileName.empty()) { LogFile = fopen(fileName.c_str(),"wb");}
 
