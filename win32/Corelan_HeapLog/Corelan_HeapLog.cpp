@@ -151,7 +151,7 @@ ModuleImage addModuleToArray(IMG img)
 	SEC sec = IMG_SecHead(img);
 	ModuleImage modimage;
 	modimage.ImageName = IMG_Name(img);
-	modimage.ImageBase = IMG_LowAddress(img);
+	modimage.ImageBase = IMG_StartAddress(img);
 	modimage.ImageEnd = IMG_HighAddress(img);
 	imageinfo[modimage.ImageName] = modimage;
 	arrLoadedModules.push_back(modimage);
@@ -162,13 +162,13 @@ ModuleImage addModuleToArray(IMG img)
 string getModuleImageNameByAddress(ADDRINT address)
 {
 	string returnval = "";
-	// iterate over array
-	for (ModuleImage modimage : arrLoadedModules)
+	IMG theimage;
+	PIN_LockClient();
+	theimage = IMG_FindByAddress(address);
+	PIN_UnlockClient();
+	if (IMG_Valid(theimage))
 	{
-		if (modimage.ImageBase <= address && address <= modimage.ImageEnd)
-		{
-			return modimage.ImageName;
-		}
+		returnval = IMG_Name(theimage);
 	}
 	return returnval;
 }
