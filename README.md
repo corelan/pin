@@ -50,7 +50,7 @@ Output is written to `corelan_heaplog_<pid>.log`.
 
 You can specify 2 command line options: <br>
 `-logalloc <value>` : enable or disable logging allocations by setting value to 1 or 0<br>
-`-logfree <value>` :  enable or disable logging allocations by setting value to 1 or 0<br>
+`-logfree <value>` :  enable or disable logging free operations by setting value to 1 or 0<br>
 Both settings are enabled by default.
 
 The pintool *should* be capable of instrumenting child processes, provided that you have specified the `-follow-execv` pin command line option.
