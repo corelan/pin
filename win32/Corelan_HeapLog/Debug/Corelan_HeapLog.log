@@ -1,5 +1,5 @@
-﻿Build started 13/12/2015 15:13:47.
-     1>Project "C:\pin\vc11\source\tools\Corelan_HeapLog\Corelan_HeapLog.vcxproj" on node 2 (Build target(s)).
+﻿Build started 13/12/2015 15:42:58.
+     1>Project "C:\pin\vc11\source\tools\Corelan_HeapLog\Corelan_HeapLog.vcxproj" on node 2 (Rebuild target(s)).
      1>ClCompile:
          C:\Program Files (x86)\Microsoft Visual Studio 11.0\VC\bin\CL.exe /c /I..\..\include\pin /I..\..\include\pin\gen /I..\InstLib /I"..\..\..\extras\xed-ia32\include" /I..\..\..\extras\components\include /Zi /nologo /W3 /WX- /Od /Oy- /D TARGET_IA32 /D HOST_IA32 /D TARGET_WINDOWS /D BIGARRAY_MULTIPLIER=1 /D _CRT_SECURE_NO_DEPRECATE /D _SECURE_SCL=0 /D WIN32 /Gm- /MT /GS- /Gy /fp:precise /Zc:wchar_t /Zc:forScope /GR- /Fo"Debug\\" /Fd"Debug\vc110.pdb" /Gd /TP /wd4530 /analyze- /errorReport:prompt /EHs- /EHa- Corelan_HeapLog.cpp
          Corelan_HeapLog.cpp
@@ -7,8 +7,8 @@
          C:\Program Files (x86)\Microsoft Visual Studio 11.0\VC\bin\link.exe /ERRORREPORT:PROMPT /OUT:"C:\pin\vc11\source\tools\Corelan_HeapLog\Debug\Corelan_HeapLog.dll" /INCREMENTAL:NO /NOLOGO /LIBPATH:..\..\..\ia32\lib /LIBPATH:"..\..\..\ia32\lib-ext" /LIBPATH:"..\..\..\extras\xed-ia32\lib" pin.lib libxed.lib libcpmt.lib libcmt.lib pinvm.lib kernel32.lib "ntdll-32.lib" /NODEFAULTLIB /MANIFEST:NO /DEBUG /PDB:"C:\pin\vc11\source\tools\Corelan_HeapLog\Debug\Corelan_HeapLog.pdb" /OPT:NOREF /TLBID:1 /ENTRY:"Ptrace_DllMainCRTStartup@12" /BASE:"0x55000000" /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\pin\vc11\source\tools\Corelan_HeapLog\Debug\Corelan_HeapLog.lib" /MACHINE:X86 /SAFESEH:NO /export:main /DLL Debug\Corelan_HeapLog.obj
             Creating library C:\pin\vc11\source\tools\Corelan_HeapLog\Debug\Corelan_HeapLog.lib and object C:\pin\vc11\source\tools\Corelan_HeapLog\Debug\Corelan_HeapLog.exp
          Corelan_HeapLog.vcxproj -> C:\pin\vc11\source\tools\Corelan_HeapLog\Debug\Corelan_HeapLog.dll
-     1>Done Building Project "C:\pin\vc11\source\tools\Corelan_HeapLog\Corelan_HeapLog.vcxproj" (Build target(s)).
+     1>Done Building Project "C:\pin\vc11\source\tools\Corelan_HeapLog\Corelan_HeapLog.vcxproj" (Rebuild target(s)).
 
 Build succeeded.
 
-Time Elapsed 00:00:02.95
+Time Elapsed 00:00:04.91

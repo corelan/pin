@@ -71,8 +71,7 @@ public:
 
 	void save_to_log()
 	{
-		//fprintf(LogFile, "** INFO ** Module %s loaded at 0x%p, module ends at 0x%p\n", ImageName, ImageBase, ImageEnd);
-		fprintf(LogFile, "** Module %s loaded  (0x%p -> 0x%p) **\n", ImageName, ImageBase, ImageEnd);
+		fprintf(LogFile, "** Module %s loaded  (0x%p -> 0x%p)**\n", ImageName, ImageBase, ImageEnd);
 	}
 };
 
@@ -319,7 +318,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(allocRtn);
 
-				fprintf(LogFile,"%s", "Adding instrumentation for RtlAllocateHeap\n");
+				fprintf(LogFile,"Adding instrumentation for RtlAllocateHeap (0x%p)\n", allocRtn);
                 
 				RTN_InsertCall(allocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlAllocateHeapBefore,
 					IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
@@ -334,7 +333,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 			}
 		}
 
-		//  Find the RtlAllocateHeap() function.
+		//  Find the RtlReAllocateHeap() function.
 		else if (undFuncName == "RtlReAllocateHeap" && LogAlloc)
 		{
 			RTN reallocRtn = RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
@@ -346,7 +345,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(reallocRtn);
 
-				fprintf(LogFile,"%s", "Adding instrumentation for RtlReAllocateHeap\n");
+				fprintf(LogFile,"Adding instrumentation for RtlReAllocateHeap (0x%p)\n", reallocRtn);
 				// HeapHandle
 				// Flags
 				// MemoryPointer
@@ -373,7 +372,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 			{
 				RTN_Open(freeRtn);
 
-				fprintf(LogFile,"%s", "Adding instrumentation for RtlFreeHeap\n");
+				fprintf(LogFile,"Adding instrumentation for RtlFreeHeap (0x%p)\n", freeRtn);
                 
 				RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlFreeHeapBefore,
 					IARG_FUNCARG_ENTRYPOINT_VALUE, 2,	// address
@@ -406,11 +405,6 @@ VOID Fini(INT32 code, VOID *v)
 
 
 /*!
- * The main procedure of the tool.
- * This function is called when the application image is loaded but not yet started.
- * @param[in]   argc            total number of elements in the argv array
- * @param[in]   argv            array of command line arguments, 
- *                              including pin -t <toolname> -- ...
  */
 int main(int argc, char *argv[])
 {
@@ -455,7 +449,6 @@ int main(int argc, char *argv[])
 		fprintf(LogFile, "Logging heap free: NO\n");
 	}
 
-	fprintf(LogFile, "==========================================\n");
 
 	// notify when following child process
 	PIN_AddFollowChildProcessFunction(FollowChild, 0);
