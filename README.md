@@ -45,11 +45,13 @@ C:\pin\vc11\source\tools>python createpintool.py MyNewProjectName
 
 ### 1. Corelan_HeapLog
 This pintool allows you to log all calls to RtlAllocateHeap and RtlFreeHeap.<br>
-Output is written to corelan_heaplog_<pid>.log.
+Output is written to `corelan_heaplog_<pid>.log`.
+(Fresh file for every process)
 
 You can specify 2 command line options: <br>
 `-logalloc <value>` : enable or disable logging allocations by setting value to 1 or 0<br>
 `-logfree <value>` :  enable or disable logging allocations by setting value to 1 or 0<br>
+Both settings are enabled by default.
 
 The pintool *should* be capable of instrumenting child processes, provided that you have specified the `-follow-execv` pin command line option.
 
