@@ -94,6 +94,10 @@ public:
 		{
 			fprintf(LogFile, "PID: %u | alloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 		}
+		else if (operation_type ==  "rtlreallocateheap")
+		{
+			fprintf(LogFile, "PID: %u | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+		}
 		else if (operation_type == "rtlfreeheap")
 		{
 			fprintf(LogFile, "PID: %u | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
@@ -182,19 +186,56 @@ VOID CaptureRtlAllocateHeapBefore(THREADID tid, UINT32 flags, int size)
 }
 
 
-
 VOID CaptureRtlAllocateHeapAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 {
 	// At end of function restore requested size and save data
 	// avoid noise
 	if (addr > 0x1000 && addr < 0x7fffffff)
 	{
-		//ADDRINT SavedRetPtr = (ADDRINT)PIN_GetContextReg(ctx, REG_EIP);
+		//restore size (dwBytes) argument that was stored at start of function
 		int size = (int) PIN_GetThreadData(alloc_key, tid);
 		
 		// create new object
 		HeapOperation ho_alloc;
 		ho_alloc.operation_type = "rtlallocateheap";
+		ho_alloc.chunk_start = addr;
+		ho_alloc.chunk_size = size;
+		ho_alloc.chunk_end = addr + size;
+		ho_alloc.saved_return_pointer = caller;
+		ho_alloc.operation_timestamp = time(0);
+		string imagename = getModuleImageNameByAddress(caller);
+		ho_alloc.srp_imagename = imagename;
+
+		ho_alloc.save_to_log();
+
+		arrAllOperations.push_back(ho_alloc);
+		// add to map chunksizes (or update existing entry)
+		chunksizes[addr] = size;
+
+	}
+}
+
+
+
+VOID CaptureRtlReAllocateHeapBefore(THREADID tid, UINT32 flags, int size)
+{
+	// At start of function, simply remember the requested size in TLS
+	PIN_SetThreadData(alloc_key, (void *) size, tid);
+}
+
+
+VOID CaptureRtlReAllocateHeapAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
+{
+	// At end of function restore requested size and save data
+	// avoid noise
+	if (addr > 0x1000 && addr < 0x7fffffff)
+	{
+		//restore size argument that was stored at start of function
+		int size = (int) PIN_GetThreadData(alloc_key, tid);
+		
+		// create new object
+		HeapOperation ho_alloc;
+		ho_alloc.operation_type = "rtlreallocateheap";
 		ho_alloc.chunk_start = addr;
 		ho_alloc.chunk_size = size;
 		ho_alloc.chunk_end = addr + size;
@@ -260,61 +301,91 @@ VOID AddInstrumentation(IMG img, VOID *v)
 	thisimage = addModuleToArray(img);
 	thisimage.save_to_log();
 
-    // next, walk through the symbols in the symbol table to see if it contains the Heap related functions that we want to monitor
-    //
-    for (SYM sym = IMG_RegsymHead(img); SYM_Valid(sym); sym = SYM_Next(sym))
-    {
-        string undFuncName = PIN_UndecorateSymbolName(SYM_Name(sym), UNDECORATION_NAME_ONLY);
+	// next, walk through the symbols in the symbol table to see if it contains the Heap related functions that we want to monitor
+	//
+	for (SYM sym = IMG_RegsymHead(img); SYM_Valid(sym); sym = SYM_Next(sym))
+	{
+		string undFuncName = PIN_UndecorateSymbolName(SYM_Name(sym), UNDECORATION_NAME_ONLY);
 
-        //  Find the RtlAllocateHeap() function.
-        if (undFuncName == "RtlAllocateHeap" && LogAlloc)
-        {
-            RTN allocRtn = RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
+		//  Find the RtlAllocateHeap() function.
+		if (undFuncName == "RtlAllocateHeap" && LogAlloc)
+		{
+			RTN allocRtn = RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
             
-            if (RTN_Valid(allocRtn))
-            {
-                // Instrument to capture allocation address and original function arguments
+			if (RTN_Valid(allocRtn))
+			{
+				// Instrument to capture allocation address and original function arguments
 				// at end of the RtlAllocateHeap function
 
-                RTN_Open(allocRtn);
+				RTN_Open(allocRtn);
 
 				fprintf(LogFile,"%s", "Adding instrumentation for RtlAllocateHeap\n");
                 
-                RTN_InsertCall(allocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlAllocateHeapBefore,
-                    IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
-                    IARG_FUNCARG_ENTRYPOINT_VALUE, 2, IARG_END);
+				RTN_InsertCall(allocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlAllocateHeapBefore,
+					IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
+					IARG_FUNCARG_ENTRYPOINT_VALUE, 2, IARG_END);
 
-                // return value is the address that has been allocated
-                RTN_InsertCall(allocRtn, IPOINT_AFTER, (AFUNPTR) &CaptureRtlAllocateHeapAfter,
-                    IARG_THREAD_ID, IARG_FUNCRET_EXITPOINT_VALUE, IARG_G_ARG0_CALLER, IARG_END);
+				// return value is the address that has been allocated
+				RTN_InsertCall(allocRtn, IPOINT_AFTER, (AFUNPTR) &CaptureRtlAllocateHeapAfter,
+					IARG_THREAD_ID, IARG_FUNCRET_EXITPOINT_VALUE, IARG_G_ARG0_CALLER, IARG_END);
 
          
-                RTN_Close(allocRtn);
-            }
-        }
-		//  Find the RtlFreeHeap() function.
-        else if (undFuncName == "RtlFreeHeap" && LogFree)
-        {
-            RTN freeRtn = RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
+				RTN_Close(allocRtn);
+			}
+		}
+
+		//  Find the RtlAllocateHeap() function.
+		else if (undFuncName == "RtlReAllocateHeap" && LogAlloc)
+		{
+			RTN reallocRtn = RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
             
-            if (RTN_Valid(freeRtn))
-            {
-                RTN_Open(freeRtn);
+			if (RTN_Valid(reallocRtn))
+			{
+				// Instrument to capture allocation address and original function arguments
+				// at end of the RtlAllocateHeap function
+
+				RTN_Open(reallocRtn);
+
+				fprintf(LogFile,"%s", "Adding instrumentation for RtlReAllocateHeap\n");
+				// HeapHandle
+				// Flags
+				// MemoryPointer
+				// Size
+				RTN_InsertCall(reallocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlReAllocateHeapBefore,
+					IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 2,
+					IARG_FUNCARG_ENTRYPOINT_VALUE, 3, IARG_END);
+
+				// return value is the address that has been allocated
+				RTN_InsertCall(reallocRtn, IPOINT_AFTER, (AFUNPTR) &CaptureRtlReAllocateHeapAfter,
+					IARG_THREAD_ID, IARG_FUNCRET_EXITPOINT_VALUE, IARG_G_ARG0_CALLER, IARG_END);
+
+				RTN_Close(reallocRtn);
+			}
+		}
+
+
+		//  Find the RtlFreeHeap() function.
+		else if (undFuncName == "RtlFreeHeap" && LogFree)
+		{
+			RTN freeRtn = RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
+            
+			if (RTN_Valid(freeRtn))
+			{
+				RTN_Open(freeRtn);
 
 				fprintf(LogFile,"%s", "Adding instrumentation for RtlFreeHeap\n");
                 
-                RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlFreeHeapBefore,
-                    IARG_FUNCARG_ENTRYPOINT_VALUE, 2,	// address
+				RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlFreeHeapBefore,
+					IARG_FUNCARG_ENTRYPOINT_VALUE, 2,	// address
 					IARG_G_ARG0_CALLER,					// saved return pointer
-                    IARG_END);
+					IARG_END);
+
+				RTN_Close(freeRtn);
+			}
+		}
 
 
-                RTN_Close(freeRtn);
-            }
-        }
-
-
-    }
+	}
 }
 
 
@@ -355,7 +426,7 @@ int main(int argc, char *argv[])
 	LogAlloc = KnobLogAlloc.Value();
 	LogFree = KnobLogFree.Value();
 
-    if (!fileName.empty()) { LogFile = fopen(fileName.c_str(),"wb");}
+	if (!fileName.empty()) { LogFile = fopen(fileName.c_str(),"wb");}
 
 	fprintf(LogFile, "Instrumentation started\n");
 
@@ -391,19 +462,19 @@ int main(int argc, char *argv[])
 
 	// only add instrumentation if we have to :)
 
-    if (LogAlloc || LogFree)
-    {
-        // Register function to be called to instrument traces
-        IMG_AddInstrumentFunction(AddInstrumentation, 0);
+	if (LogAlloc || LogFree)
+	{
+		// Register function to be called to instrument traces
+		IMG_AddInstrumentFunction(AddInstrumentation, 0);
 
-        // Register function to be called when the application exits
-        PIN_AddFiniFunction(Fini, 0);
-    }
+		// Register function to be called when the application exits
+		PIN_AddFiniFunction(Fini, 0);
+	}
 
 	fprintf(LogFile, "==========================================\n\n");
 
-    // Start the program, never returns
-    PIN_StartProgram();
+	// Start the program, never returns
+	PIN_StartProgram();
     
-    return 0;
+	return 0;
 }
