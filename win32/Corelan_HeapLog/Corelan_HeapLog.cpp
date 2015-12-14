@@ -54,6 +54,7 @@ namespace WINDOWS
 BOOL LogAlloc = true;
 BOOL LogFree = true;
 BOOL ShowTimeStamp = false;
+BOOL SplitFiles = false;
 TLS_KEY alloc_key;
 FILE* LogFile;
 FILE* ExceptionLogFile;
@@ -140,8 +141,12 @@ KNOB<BOOL>   KnobLogAlloc(KNOB_MODE_WRITEONCE,  "pintool",
 KNOB<BOOL>   KnobLogFree(KNOB_MODE_WRITEONCE,  "pintool",
 	"logfree", "1", "Log heap free operations (RtlFreeHeap)");
 
-KNOB<BOOL>   KnowShowTimeStamp(KNOB_MODE_WRITEONCE,  "pintool",
+KNOB<BOOL>   KnobShowTimeStamp(KNOB_MODE_WRITEONCE,  "pintool",
 	"timestamp", "0", "Show timestamps in output");
+
+KNOB<BOOL>   KnobSplitFiles(KNOB_MODE_WRITEONCE,  "pintool",
+	"splitfiles", "0", "Split output into PID-specific files");
+
 
 /* ===================================================================== */
 // Utilities
@@ -155,7 +160,8 @@ INT32 Usage()
 
 void CloseLogFile()
 {
-	std::fprintf(LogFile, "\n############## EOF\n");
+	std::fprintf(ExceptionLogFile,"\nClosing log file for PID %u\n", PIN_GetPid());
+	std::fprintf(LogFile, "############## EOF\n");
 	fflush(LogFile);
 	fclose(LogFile);
 }
@@ -595,29 +601,41 @@ int main(int argc, char *argv[])
     // Initialize PIN library.
 	PIN_Init(argc,argv);
 
+	// convert command line options into Global options
+	LogAlloc = KnobLogAlloc.Value();
+	LogFree = KnobLogFree.Value();
+	ShowTimeStamp = KnobShowTimeStamp.Value(); 
+	SplitFiles = KnobSplitFiles.Value();
+
+	// define logfile name and behaviour
 	int currentpid = PIN_GetPid();
 	stringstream ss;
 	ss << "corelan_heaplog_";
 	ss << currentpid;
 	ss << ".log";
 	string fileName = ss.str();
+	char * openMode = "w+";
 
-	LogAlloc = KnobLogAlloc.Value();
-	LogFree = KnobLogFree.Value();
-	ShowTimeStamp = KnowShowTimeStamp.Value(); 
+	if (!SplitFiles)
+	{
+		fileName = "corelan_heaplog.log";
+		openMode = "a+";
+	}
 
-	if (!fileName.empty()) { LogFile = fopen(fileName.c_str(),"w+");}
+	LogFile = fopen(fileName.c_str(),openMode);
 	ExceptionLogFile = fopen("corelan_heaplog_exception.log","a+");
 
 	std::fprintf(LogFile, "Instrumentation started\n");
 
+	// load symbols. 
 	PIN_InitSymbols();
 
-	// we will need a way to pass data around, so we'll store stuff in TLS
 
+	// we will need a way to pass data around, so we'll store stuff in TLS
 	alloc_key = PIN_CreateThreadDataKey(0);
 
-
+	std::fprintf(LogFile, "==========================================\n");
+	fprintf(LogFile,"Adding output for PID %u into this file\n", currentpid);
 	if (LogAlloc)
 	{
 		std::fprintf(LogFile, "Logging heap alloc: YES\n");
