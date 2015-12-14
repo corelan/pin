@@ -86,4 +86,5 @@ Closing exception log file for PID 3000
 ############## EOF
 ```
 If a register contains a value that belongs to a heap chunk, Corelan_HeapLog will show all heap related operations (alloc & free) for that chunk in chronological order. <br>
-This should make it easier to detect Use After Free cases (i.e. use of a chunk that has been freed. See example output, EAX & EDI)
+This should make it easier to detect Use After Free cases (i.e. use of a chunk that has been freed. See example output, EAX & EDI)<br>
+Hint: if you're interested in finding UAF, don't forget to enable full page heap mode (+hpa) first for the process that you're going to instrument.
