@@ -41,9 +41,10 @@ C:\pin\vc11\source\tools>python createpintool.py MyNewProjectName
 3. All pintools must be considered "proof of concept" and come without any warranty whatsoever.  The pintools have only been tested in a very small number of situations and may not work on your system. I do, however, encourage everyone to improve the code, performance, stability and/or submit Pull Requests to add interesting functionality.
 4. I have compiled all pin tools in "Debug" mode.
 5. If your pin tool doesn't run (i.e. if it terminates almost immediately after launching it), launch pin with the `-xyzzy -mesgon log_win` options, to activate some verbose logging.  A file `pintool.log` will be created in case of C++ errors.
-6. The Corelan_HeapLog pin tool doesn't always end up launching the process.  Try again after a few seconds and it should work. (Weird error in pintool.log. Not sure what to do with it).
+6. The Corelan_HeapLog pin tool doesn't always end up launching the process. Especially with apps that spawn a lot of threads (IE, etc), I've been seeing weird errors in pintool.log. (Something like `E:Unexpected memory deallocation request of aligned memory`. Not sure what to do with it or how to fix it. Pin bug ?).
 7. Remove *.log files before running the Corelan_HeapLog pin tool again. Also, make sure any relevant previous processes are killed before launching a new pin instance.
 8. Pin may continue to write output to the log file(s) even after the instrumented process looks like it's gone.  Wait for all processes to properly finish & terminate before accessing log files.
+9. I wrote this pintool in just a few days, after spending about a week studying C++ basics from Bjarne Stroustrup's books.  I am fully aware my code can be optimized etc. I will update/improve as I learn how to write better code.
 
 ## Available pintools in this repository
 
