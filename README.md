@@ -41,7 +41,7 @@ C:\pin\vc11\source\tools>python createpintool.py MyNewProjectName
 3. All pintools must be considered "proof of concept" and come without any warranty whatsoever.  The pintools have only been tested in a very small number of situations and may not work on your system. I do, however, encourage everyone to improve the code, performance, stability and/or submit Pull Requests to add interesting functionality.
 4. I have compiled all pin tools in "Debug" mode.
 5. If your pin tool doesn't run (i.e. if it terminates almost immediately after launching it), launch pin with the `-xyzzy -mesgon log_win` options, to activate some verbose logging.  A file `pintool.log` will be created in case of C++ errors.
-6. The Corelan_HeapLog pin tool doesn't always end up launching the process.  Try again after a few seconds and it should work. (Weird error in pin.log. Not sure what to do with it).
+6. The Corelan_HeapLog pin tool doesn't always end up launching the process.  Try again after a few seconds and it should work. (Weird error in pintool.log. Not sure what to do with it).
 7. Remove *.log files before running the Corelan_HeapLog pin tool again. Also, make sure any relevant previous processes are killed before launching a new pin instance.
 8. Pin may continue to write output to the log file(s) even after the instrumented process looks like it's gone.  Wait for all processes to properly finish & terminate before accessing log files.
 
@@ -49,7 +49,8 @@ C:\pin\vc11\source\tools>python createpintool.py MyNewProjectName
 
 ### 1. Corelan_HeapLog
 This pintool allows you to log all calls to RtlAllocateHeap, RtlReAllocateHeap, VirtualAlloc and RtlFreeHeap.<br>
-Output is written to `corelan_heaplog_<pid>.log` (Fresh file for every process), unless `-splitfiles 0` is used (see below). In that case, output will be appended to corelan_heaplog.log.<br>
+Output is written to `corelan_heaplog.log`, unless you have specified the `-splitfiles 1` option. This option will tell the pin tool to store output into `corelan_heaplog_<pid>.log` files instead (Fresh file for every process)
+By default, output will be appended to corelan_heaplog.log. (In other words, make sure to put the file aside if you're instrumenting a different app)<br>
 Exceptions are written to `corelan_heaplog_exception.log` (One file, exceptions are appended to this file)
 
 You can specify a couple of command line options: <br>
