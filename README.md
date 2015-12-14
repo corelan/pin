@@ -58,7 +58,9 @@ You can specify a couple of command line options: <br>
 `-timestamp <value>`  : enable or disable showing timestamp of heap operation by setting value to 1 or 0<br>
 `-splitfiles <value>` : enable or disable splitting output files into files that contain reference to the PID. Set value to 1 or 0<br>
 `-silent <value>`     : enable or disable writing allocs and frees to output file(s). Set value to 1 or 0<br>
-Both log settings are enabled by default. Timestamp is disabled by default (as it may slow down the process a tiny little bit). The splitfiles option is disabled by default.
+Both log settings are enabled by default.<br>
+Timestamp is disabled by default (as it may slow down the process a tiny little bit). <br>
+The splitfiles option is disabled by default.<br>
 The silent option is disabled by default. Enabling this option will speed up the process (as the cost of writing entries to file will be gone).  Of course, this only makes sense if you're only interested in seeing the exception context.
 
 The pintool *should* be capable of instrumenting child processes, provided that you have specified the `-follow-execv` pin command line option.
@@ -83,4 +85,5 @@ EDI: 0x160AAFA8 rtlallocateheap(0x144) rtlfreeheap(0x144) rtlallocateheap(0x58) 
 Closing exception log file for PID 3000
 ############## EOF
 ```
-If a register contains a value that belongs to a heap chunk, Corelan_HeapLog will show all heap related operations (alloc & free) for that chunk in chronological order. 
+If a register contains a value that belongs to a heap chunk, Corelan_HeapLog will show all heap related operations (alloc & free) for that chunk in chronological order. <br>
+This should make it easier to detect Use After Free cases (i.e. use of a chunk that has been freed. See example output, EAX & EDI)
