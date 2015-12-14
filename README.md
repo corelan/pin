@@ -57,7 +57,9 @@ You can specify a couple of command line options: <br>
 `-logfree <value>`    : enable or disable logging free operations by setting value to 1 or 0<br>
 `-timestamp <value>`  : enable or disable showing timestamp of heap operation by setting value to 1 or 0<br>
 `-splitfiles <value>` : enable or disable splitting output files into files that contain reference to the PID. Set value to 1 or 0<br>
+`-silent <value>`     : enable or disable writing allocs and frees to output file(s). Set value to 1 or 0<br>
 Both log settings are enabled by default. Timestamp is disabled by default (as it may slow down the process a tiny little bit). The splitfiles option is disabled by default.
+The silent option is disabled by default. Enabling this option will speed up the process (as the cost of writing entries to file will be gone).  Of course, this only makes sense if you're only interested in seeing the exception context.
 
 The pintool *should* be capable of instrumenting child processes, provided that you have specified the `-follow-execv` pin command line option.
 

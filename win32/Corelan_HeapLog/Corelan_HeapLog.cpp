@@ -55,6 +55,7 @@ BOOL LogAlloc = true;
 BOOL LogFree = true;
 BOOL ShowTimeStamp = false;
 BOOL SplitFiles = false;
+BOOL StaySilent = false;
 TLS_KEY alloc_key;
 FILE* LogFile;
 FILE* ExceptionLogFile;
@@ -103,21 +104,25 @@ public:
 		{
 			ascii_time = "";
 		}
-		if (operation_type ==  "rtlallocateheap")
+
+		if (!StaySilent)
 		{
-			std::fprintf(LogFile, "PID: %u | %s | alloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
-		}
-		else if (operation_type ==  "rtlreallocateheap")
-		{
-			std::fprintf(LogFile, "PID: %u | %s | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
-		}
-		else if (operation_type ==  "virtualalloc")
-		{
-			std::fprintf(LogFile, "PID: %u | %s | virtualalloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
-		}
-		else if (operation_type == "rtlfreeheap")
-		{
-			std::fprintf(LogFile, "PID: %u | %s | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid,ascii_time, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
+			if (operation_type ==  "rtlallocateheap")
+			{
+				std::fprintf(LogFile, "PID: %u | %s | alloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+			}
+			else if (operation_type ==  "rtlreallocateheap")
+			{
+				std::fprintf(LogFile, "PID: %u | %s | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+			}
+			else if (operation_type ==  "virtualalloc")
+			{
+				std::fprintf(LogFile, "PID: %u | %s | virtualalloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+			}
+			else if (operation_type == "rtlfreeheap")
+			{
+				std::fprintf(LogFile, "PID: %u | %s | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid,ascii_time, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
+			}
 		}
 	}
 
@@ -147,6 +152,9 @@ KNOB<BOOL>   KnobShowTimeStamp(KNOB_MODE_WRITEONCE,  "pintool",
 KNOB<BOOL>   KnobSplitFiles(KNOB_MODE_WRITEONCE,  "pintool",
 	"splitfiles", "0", "Split output into PID-specific files");
 
+KNOB<BOOL>   KnobStaySilent(KNOB_MODE_WRITEONCE,  "pintool",
+	"silent", "0", "Silent mode, do not log allocs & frees to log file");
+
 
 /* ===================================================================== */
 // Utilities
@@ -174,6 +182,20 @@ void CloseExceptionLogFile()
 	fclose(ExceptionLogFile);
 }
 
+
+string getCurrentDateTimeStr()
+{
+	time_t thistime;
+	thistime = time(0);
+	char * ascii_time;
+	struct tm * timeinfo;
+	time ( & thistime);
+	timeinfo = localtime ( & thistime);
+	ascii_time = strtok(asctime(timeinfo),"\n");
+	stringstream returnval;
+	returnval << ascii_time;
+	return returnval.str();
+}
 
 
 WINDOWS::DWORD findSize(ADDRINT address)
@@ -525,6 +547,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 VOID LogContext(const CONTEXT *ctxt)
 {
+	std::fprintf(ExceptionLogFile, "Exception timestamp: %s\n", getCurrentDateTimeStr());
 	std::fprintf(ExceptionLogFile, "PID %u | Exception context:\n", PIN_GetPid());
 	ADDRINT EIP = PIN_GetContextReg( ctxt, REG_INST_PTR );
 	ADDRINT EAX = PIN_GetContextReg( ctxt, REG_EAX );
@@ -606,6 +629,7 @@ int main(int argc, char *argv[])
 	LogFree = KnobLogFree.Value();
 	ShowTimeStamp = KnobShowTimeStamp.Value(); 
 	SplitFiles = KnobSplitFiles.Value();
+	StaySilent = KnobStaySilent.Value();
 
 	// define logfile name and behaviour
 	int currentpid = PIN_GetPid();
@@ -634,8 +658,12 @@ int main(int argc, char *argv[])
 	// we will need a way to pass data around, so we'll store stuff in TLS
 	alloc_key = PIN_CreateThreadDataKey(0);
 
+	string ascii_time;
+	ascii_time = getCurrentDateTimeStr();
+
 	std::fprintf(LogFile, "==========================================\n");
-	fprintf(LogFile,"Adding output for PID %u into this file\n", currentpid);
+	std::fprintf(LogFile, "Date & time: %s\n", ascii_time);
+	std::fprintf(LogFile,"Adding output for PID %u into this file\n", currentpid);
 	if (LogAlloc)
 	{
 		std::fprintf(LogFile, "Logging heap alloc: YES\n");
