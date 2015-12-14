@@ -50,8 +50,8 @@ C:\pin\vc11\source\tools>python createpintool.py MyNewProjectName
 ### 1. Corelan_HeapLog
 This pintool allows you to log all calls to RtlAllocateHeap, RtlReAllocateHeap, VirtualAlloc and RtlFreeHeap.<br>
 Output is written to `corelan_heaplog.log`, unless you have specified the `-splitfiles 1` option. This option will tell the pin tool to store output into `corelan_heaplog_<pid>.log` files instead (Fresh file for every process)
-By default, output will be appended to corelan_heaplog.log. (In other words, make sure to put the file aside if you're instrumenting a different app)<br>
-Exceptions are written to `corelan_heaplog_exception.log` (One file, exceptions are appended to this file)
+By default, output will be appended to `corelan_heaplog.log`. (In other words, make sure to put the file aside if you're instrumenting a different app)<br>
+Exceptions are written to `corelan_heaplog_exception.log`. (One file, exceptions are appended to this file)
 
 You can specify a couple of command line options: <br>
 `-logalloc <value>`   : enable or disable logging allocations by setting value to 1 or 0<br>
@@ -75,12 +75,11 @@ PID 3000 | Exception context:
 EIP: 0x61EDE1CB (C:\Windows\SysWOW64\mshtml.dll)
 EAX: 0x160AAFA8 rtlallocateheap(0x144) rtlfreeheap(0x144) rtlallocateheap(0x58) rtlfreeheap(0x58) 
 EBX: 0x13346F30 rtlallocateheap(0xd0) 
-ECX: 0x00000052 n_rtti_object@std@@
+ECX: 0x00000052 
 EDX: 0x00000000 
-
-EBP: 0x0B79D6C4 (null)
+EBP: 0x0B79D6C4 
 ESP: 0x0B79D670 
-ESI: 0x00000000 (null)
+ESI: 0x00000000 
 EDI: 0x160AAFA8 rtlallocateheap(0x144) rtlfreeheap(0x144) rtlallocateheap(0x58) rtlfreeheap(0x58) 
 
 Closing exception log file for PID 3000
