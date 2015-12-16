@@ -55,15 +55,17 @@ By default, output will be appended to `corelan_heaplog.log`. (In other words, m
 Exceptions are written to `corelan_heaplog_exception.log`. (One file, exceptions are appended to this file)
 
 You can specify a couple of command line options: <br>
-`-logalloc <value>`   : enable or disable logging allocations by setting value to 1 or 0<br>
-`-logfree <value>`    : enable or disable logging free operations by setting value to 1 or 0<br>
-`-timestamp <value>`  : enable or disable showing timestamp of heap operation by setting value to 1 or 0<br>
-`-splitfiles <value>` : enable or disable splitting output files into files that contain reference to the PID. Set value to 1 or 0<br>
-`-silent <value>`     : enable or disable writing allocs and frees to output file(s). Set value to 1 or 0<br>
+`-logalloc <value>`    : enable or disable logging allocations by setting value to 1 or 0<br>
+`-logfree <value>`     : enable or disable logging free operations by setting value to 1 or 0<br>
+`-timestamp <value>`   : enable or disable showing timestamp of heap operation by setting value to 1 or 0<br>
+`-splitfiles <value>`  : enable or disable splitting output files into files that contain reference to the PID. Set value to 1 or 0<br>
+`-silent <value>`      : enable or disable writing allocs and frees to output file(s). Set value to 1 or 0<br>
+`-bufferoutput <value>`: enable or disable buffering output to memory before writing to disk. Set value to 1 or 0<br>
 Both log settings are enabled by default.<br>
 Timestamp is disabled by default (as it may slow down the process a tiny little bit). <br>
 The splitfiles option is disabled by default.<br>
-The silent option is disabled by default. Enabling this option will speed up the process (as the cost of writing entries to file will be gone).  Of course, this only makes sense if you're only interested in seeing the exception context.
+The silent option is disabled by default. Enabling this option will speed up the process (as the cost of writing entries to file will be gone).  Of course, this only makes sense if you're only interested in seeing the exception context.<br>
+The bufferoutput option is enabled by default.<br>
 
 The pintool *should* be capable of instrumenting child processes, provided that you have specified the `-follow-execv` pin command line option.
 

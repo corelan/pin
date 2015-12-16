@@ -1,4 +1,4 @@
-﻿Build started 14/12/2015 8:52:31.
+﻿Build started 16/12/2015 15:34:00.
      1>Project "C:\pin\vc11\source\tools\Corelan_HeapLog\Corelan_HeapLog.vcxproj" on node 2 (Build target(s)).
      1>ClCompile:
          C:\Program Files (x86)\Microsoft Visual Studio 11.0\VC\bin\CL.exe /c /I..\..\include\pin /I..\..\include\pin\gen /I..\InstLib /I"..\..\..\extras\xed-ia32\include" /I..\..\..\extras\components\include /Zi /nologo /W3 /WX- /Od /Oy- /D TARGET_IA32 /D HOST_IA32 /D TARGET_WINDOWS /D BIGARRAY_MULTIPLIER=1 /D _CRT_SECURE_NO_DEPRECATE /D _SECURE_SCL=0 /D WIN32 /Gm- /MT /GS- /Gy /fp:precise /Zc:wchar_t /Zc:forScope /GR- /Fo"Debug\\" /Fd"Debug\vc110.pdb" /Gd /TP /wd4530 /analyze- /errorReport:prompt /EHs- /EHa- Corelan_HeapLog.cpp
@@ -11,4 +11,4 @@
 
 Build succeeded.
 
-Time Elapsed 00:00:03.55
+Time Elapsed 00:00:02.90

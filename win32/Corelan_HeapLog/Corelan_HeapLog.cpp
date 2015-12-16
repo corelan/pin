@@ -56,14 +56,46 @@ BOOL LogFree = true;
 BOOL ShowTimeStamp = false;
 BOOL SplitFiles = false;
 BOOL StaySilent = false;
+BOOL BufferOutput = true;
 TLS_KEY alloc_key;
 FILE* LogFile;
 FILE* ExceptionLogFile;
-std::map<ADDRINT,WINDOWS::DWORD> chunksizes;
+std::map<ADDRINT,WINDOWS::DWORD> chunksizes;	// used to collect info from all threads
+PIN_LOCK lock;
+
 
 /* ================================================================== */
 // Classes 
 /* ================================================================== */
+
+class CLogEntry{
+public:
+	// constructor
+	CLogEntry(FILE* LogF, std::string entrystr)
+	{
+		LogFileRef = LogF;
+		entry = entrystr;
+	}
+	
+	FILE* getLogFile()
+	{
+		return LogFileRef;
+	}
+
+	string getEntry()
+	{
+		return entry;
+	}
+
+private:
+	FILE* LogFileRef;
+	std::string entry;
+};
+
+vector<CLogEntry> arrOutputBuffer;
+
+// declare some important funcs
+void SaveToLog(FILE*, const char * fmt, ...);
 
 class ModuleImage
 {
@@ -74,7 +106,7 @@ public:
 
 	void save_to_log()
 	{
-		std::fprintf(LogFile, "** Module %s loaded at 0x%p**\n", ImageName, ImageBase);
+		SaveToLog(LogFile, "** Module %s loaded at 0x%p**\n", ImageName, ImageBase);
 	}
 };
 
@@ -109,19 +141,19 @@ public:
 		{
 			if (operation_type ==  "rtlallocateheap")
 			{
-				std::fprintf(LogFile, "PID: %u | %s | alloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+				SaveToLog(LogFile, "PID: %u | %s | alloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 			}
 			else if (operation_type ==  "rtlreallocateheap")
 			{
-				std::fprintf(LogFile, "PID: %u | %s | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+				SaveToLog(LogFile, "PID: %u | %s | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 			}
 			else if (operation_type ==  "virtualalloc")
 			{
-				std::fprintf(LogFile, "PID: %u | %s | virtualalloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+				SaveToLog(LogFile, "PID: %u | %s | virtualalloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 			}
 			else if (operation_type == "rtlfreeheap")
 			{
-				std::fprintf(LogFile, "PID: %u | %s | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid,ascii_time, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
+				SaveToLog(LogFile, "PID: %u | %s | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid,ascii_time, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
 			}
 		}
 	}
@@ -129,11 +161,8 @@ public:
 };
 
 
-// more globals
-
 vector<HeapOperation> arrAllOperations;
 vector<ModuleImage> arrLoadedModules;
-
 
 
 /* ===================================================================== */
@@ -155,6 +184,8 @@ KNOB<BOOL>   KnobSplitFiles(KNOB_MODE_WRITEONCE,  "pintool",
 KNOB<BOOL>   KnobStaySilent(KNOB_MODE_WRITEONCE,  "pintool",
 	"silent", "0", "Silent mode, do not log allocs & frees to log file");
 
+KNOB<BOOL>   KnobBufferOutput(KNOB_MODE_WRITEONCE,  "pintool",
+	"bufferoutput", "1", "Buffer output in memory before writing to file.  Dump contents to file 5000 lines at once");
 
 /* ===================================================================== */
 // Utilities
@@ -166,8 +197,24 @@ INT32 Usage()
 	return -1;
 }
 
+void dumpBufferToFile()
+{
+	PIN_LockClient();
+	for (CLogEntry le : arrOutputBuffer)
+	{
+		FILE* LogF = le.getLogFile();
+		string entry = le.getEntry();
+		fprintf(LogF, "%s", entry);
+	}
+	arrOutputBuffer.clear();
+	PIN_UnlockClient();
+}
+
+
 void CloseLogFile()
 {
+	// dump remaining log entries to file, if any
+	dumpBufferToFile();
 	std::fprintf(ExceptionLogFile,"\nClosing log file for PID %u\n", PIN_GetPid());
 	std::fprintf(LogFile, "############## EOF\n");
 	fflush(LogFile);
@@ -267,6 +314,38 @@ string getAddressInfo(ADDRINT address)
 	}
 	return info;
 }
+
+
+// wrapper to either write output to LogFile directly, or to buffer it first
+void SaveToLog(FILE* Log, const char * fmt, ...)
+{
+	va_list args;
+	// convert to string first
+		
+	char entry [512]; // truncate after that
+	va_start(args, fmt);
+	vsnprintf(entry, 511, fmt, args);
+	va_end(args);
+
+	if (BufferOutput)
+	{
+		CLogEntry thisentry(Log, entry);
+		arrOutputBuffer.push_back(thisentry);
+		// check if we should dump to file now
+		if (arrOutputBuffer.size() > 5000)
+		{
+			dumpBufferToFile();
+		}
+	}
+	else
+	{
+		// write to file directly
+		std::fprintf(Log, "%s", entry);
+	}
+	
+}
+
+
 
 /* ===================================================================== */
 // Analysis routines (runtime)
@@ -447,7 +526,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(allocRtn);
 
-				std::fprintf(LogFile,"Adding instrumentation for RtlAllocateHeap (0x%p)\n", allocRtn);
+				SaveToLog(LogFile,"Adding instrumentation for RtlAllocateHeap (0x%p)\n", allocRtn);
                 
 				RTN_InsertCall(allocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlAllocateHeapBefore,
 					IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
@@ -473,7 +552,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(reallocRtn);
 
-				std::fprintf(LogFile,"Adding instrumentation for RtlReAllocateHeap (0x%p)\n", reallocRtn);
+				SaveToLog(LogFile,"Adding instrumentation for RtlReAllocateHeap (0x%p)\n", reallocRtn);
 				// HeapHandle
 				// Flags
 				// MemoryPointer
@@ -502,7 +581,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(vaallocRtn);
 
-				std::fprintf(LogFile,"Adding instrumentation for VirtualAlloc (0x%p)\n", vaallocRtn);
+				SaveToLog(LogFile,"Adding instrumentation for VirtualAlloc (0x%p)\n", vaallocRtn);
 				// lpAddress
 				// dwSize
 				// flAllocationType
@@ -529,7 +608,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 			{
 				RTN_Open(freeRtn);
 
-				std::fprintf(LogFile,"Adding instrumentation for RtlFreeHeap (0x%p)\n", freeRtn);
+				SaveToLog(LogFile,"Adding instrumentation for RtlFreeHeap (0x%p)\n", freeRtn);
                 
 				RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlFreeHeapBefore,
 					IARG_FUNCARG_ENTRYPOINT_VALUE, 2,	// address
@@ -547,7 +626,8 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 VOID LogContext(const CONTEXT *ctxt)
 {
-	std::fprintf(ExceptionLogFile, "Exception timestamp: %s\n", getCurrentDateTimeStr());
+	string exceptiontimestamp = getCurrentDateTimeStr();
+	std::fprintf(ExceptionLogFile, "Exception timestamp: %s\n", exceptiontimestamp);
 	std::fprintf(ExceptionLogFile, "PID %u | Exception context:\n", PIN_GetPid());
 	ADDRINT EIP = PIN_GetContextReg( ctxt, REG_INST_PTR );
 	ADDRINT EAX = PIN_GetContextReg( ctxt, REG_EAX );
@@ -590,10 +670,10 @@ VOID OnException(THREADID threadIndex, CONTEXT_CHANGE_REASON reason, const CONTE
 
 	UINT32 exceptionCode = info;
 	ADDRINT	address = PIN_GetContextReg(ctxtFrom, REG_INST_PTR);
-	std::fprintf(LogFile, "\n\n*** Exception at 0x%p, code 0x%x ***\n", address, exceptionCode);
+	SaveToLog(LogFile, "\n\n*** Exception at 0x%p, code 0x%x ***\n", address, exceptionCode);
 	if ((exceptionCode >= 0xc0000000) && (exceptionCode <= 0xcfffffff))
 	{
-		std::fprintf(LogFile, "%s\n", "For more info about this exception, see exception log file ***");
+		SaveToLog(LogFile, "%s\n", "For more info about this exception, see exception log file ***");
 		LogContext(ctxtFrom);
 		CloseExceptionLogFile();
 		CloseLogFile();
@@ -604,7 +684,7 @@ VOID OnException(THREADID threadIndex, CONTEXT_CHANGE_REASON reason, const CONTE
 
 BOOL FollowChild(CHILD_PROCESS childProcess, VOID * userData)
 {
-	std::fprintf(LogFile, "\n*******************************\nCreating child process from parent PID %u\n*******************************\n\n", PIN_GetPid());
+	SaveToLog(LogFile, "\n*******************************\nCreating child process from parent PID %u\n*******************************\n\n", PIN_GetPid());
 	return true;
 }
 
@@ -612,15 +692,32 @@ BOOL FollowChild(CHILD_PROCESS childProcess, VOID * userData)
 
 VOID Fini(INT32 code, VOID *v)
 {
-	std::fprintf(LogFile,"\n\nNumber of heap operations logged: %d\n",arrAllOperations.size());
+	SaveToLog(LogFile,"\n\nNumber of heap operations logged: %d\n",arrAllOperations.size());
 	CloseLogFile();
 }
 
+
+VOID ThreadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
+{
+    PIN_GetLock(&lock, threadid+1);
+	SaveToLog(LogFile, "PID: %u | New thread id %d\n",PIN_GetPid(),threadid); 
+    PIN_ReleaseLock(&lock);
+}
+
+VOID ThreadStop(THREADID threadid, const CONTEXT *ctxt, INT32 code, VOID *v)
+{
+    PIN_GetLock(&lock, threadid+1);
+    SaveToLog(LogFile, "PID: %u | Closed thread id %d\n",PIN_GetPid(),threadid);
+    PIN_ReleaseLock(&lock);
+}
 
 /*!
  */
 int main(int argc, char *argv[])
 {
+	// init PIN Lock
+	PIN_InitLock(&lock);
+
     // Initialize PIN library.
 	PIN_Init(argc,argv);
 
@@ -630,6 +727,7 @@ int main(int argc, char *argv[])
 	ShowTimeStamp = KnobShowTimeStamp.Value(); 
 	SplitFiles = KnobSplitFiles.Value();
 	StaySilent = KnobStaySilent.Value();
+	BufferOutput = KnobBufferOutput.Value();
 
 	// define logfile name and behaviour
 	int currentpid = PIN_GetPid();
@@ -649,7 +747,7 @@ int main(int argc, char *argv[])
 	LogFile = fopen(fileName.c_str(),openMode);
 	ExceptionLogFile = fopen("corelan_heaplog_exception.log","a+");
 
-	std::fprintf(LogFile, "Instrumentation started\n");
+	SaveToLog(LogFile, "Instrumentation started\n");
 
 	// load symbols. 
 	PIN_InitSymbols();
@@ -658,33 +756,25 @@ int main(int argc, char *argv[])
 	// we will need a way to pass data around, so we'll store stuff in TLS
 	alloc_key = PIN_CreateThreadDataKey(0);
 
-	string ascii_time;
+	std::string ascii_time;
 	ascii_time = getCurrentDateTimeStr();
 
-	std::fprintf(LogFile, "==========================================\n");
-	std::fprintf(LogFile, "Date & time: %s\n", ascii_time);
-	std::fprintf(LogFile,"Adding output for PID %u into this file\n", currentpid);
-	if (LogAlloc)
-	{
-		std::fprintf(LogFile, "Logging heap alloc: YES\n");
-	}
-	else
-	{
-		std::fprintf(LogFile, "Logging heap alloc: NO\n");
-	}
+	SaveToLog(LogFile, "==========================================\n");
+	SaveToLog(LogFile, "Date & time: %s\n", ascii_time);
+	SaveToLog(LogFile,"Adding output for PID %u into this file\n", currentpid);
 
-	if (LogFree)
-	{
-		std::fprintf(LogFile, "Logging heap free: YES\n");
-	}
-	else
-	{
-		std::fprintf(LogFile, "Logging heap free: NO\n");
-	}
-
-
+	
+	if (LogAlloc) 	SaveToLog(LogFile, "Logging heap alloc: YES\n"); else SaveToLog(LogFile, "Logging heap alloc: NO\n");
+	if (LogFree) 	SaveToLog(LogFile, "Logging heap free: YES\n"); else SaveToLog(LogFile, "Logging heap free: NO\n");
+	if (BufferOutput) SaveToLog(LogFile, "Buffering output: YES\n"); else SaveToLog(LogFile, "Buffering output: NO\n");
+	
 	// notify when following child process
 	PIN_AddFollowChildProcessFunction(FollowChild, 0);
+
+	// notify when new thread is created or closed
+
+	PIN_AddThreadStartFunction(ThreadStart, 0);
+	PIN_AddThreadFiniFunction(ThreadStop, 0);
 
 	// only add instrumentation if we have to :)
 
@@ -700,7 +790,7 @@ int main(int argc, char *argv[])
 	//Handle exceptions
 	PIN_AddContextChangeFunction(OnException, 0);
 
-	std::fprintf(LogFile, "==========================================\n\n");
+	SaveToLog(LogFile, "==========================================\n\n");
 
 	// Start the program, never returns
 	PIN_StartProgram();
