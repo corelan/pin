@@ -62,6 +62,7 @@ FILE* LogFile;
 FILE* ExceptionLogFile;
 std::map<ADDRINT,WINDOWS::DWORD> chunksizes;	// used to collect info from all threads
 PIN_LOCK lock;
+int nrLogEntries = 0;
 
 
 /* ================================================================== */
@@ -331,10 +332,12 @@ void SaveToLog(FILE* Log, const char * fmt, ...)
 	{
 		CLogEntry thisentry(Log, entry);
 		arrOutputBuffer.push_back(thisentry);
+		++nrLogEntries;
 		// check if we should dump to file now
-		if (arrOutputBuffer.size() > 5000)
+		if (nrLogEntries > 5000)
 		{
 			dumpBufferToFile();
+			nrLogEntries = 0;
 		}
 	}
 	else
