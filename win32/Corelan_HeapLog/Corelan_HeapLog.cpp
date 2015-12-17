@@ -171,19 +171,19 @@ public:
 		{
 			if (operation_type ==  "rtlallocateheap")
 			{
-				saveToLog(LogFile, "PID: %u | %s | alloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+				saveToLog(LogFile, "PID: %u | %s | alloc(0x%x) = 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 			}
 			else if (operation_type ==  "rtlreallocateheap")
 			{
-				saveToLog(LogFile, "PID: %u | %s | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+				saveToLog(LogFile, "PID: %u | %s | realloc(0x%x) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 			}
 			else if (operation_type ==  "virtualalloc")
 			{
-				saveToLog(LogFile, "PID: %u | %s | virtualalloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+				saveToLog(LogFile, "PID: %u | %s | virtualalloc(0x%x) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 			}
 			else if (operation_type == "rtlfreeheap")
 			{
-				saveToLog(LogFile, "PID: %u | %s | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid,ascii_time, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
+				saveToLog(LogFile, "PID: %u | %s | free(0x%p) from 0x%p (size was 0x%x) (%s)\n",currentpid,ascii_time, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
 			}
 		}
 	}
@@ -297,7 +297,7 @@ void saveModToArray(CModuleImage& modimage)
 }
 
 
-string getCModuleImageNameByAddress(ADDRINT address)
+string getModuleImageNameByAddress(ADDRINT address)
 {
 	string returnval = "";
 	IMG theimage;
@@ -320,7 +320,7 @@ string getAddressInfo(ADDRINT address)
 	if (address > 0)
 	{
 		// check if address belongs to module or is part of heap
-		modulename = getCModuleImageNameByAddress(address);
+		modulename = getModuleImageNameByAddress(address);
 		if (!modulename.empty())
 		{
 			ss << "(" << modulename << ")";
@@ -404,7 +404,7 @@ VOID CaptureRtlAllocateHeapAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 		ho_alloc.chunk_end = addr + size;
 		ho_alloc.saved_return_pointer = caller;
 		ho_alloc.operation_timestamp = time(0);
-		string imagename = getCModuleImageNameByAddress(caller);
+		string imagename = getModuleImageNameByAddress(caller);
 		ho_alloc.srp_imagename = imagename;
 
 		ho_alloc.save_to_log();
@@ -441,7 +441,7 @@ VOID CaptureRtlReAllocateHeapAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 		ho_alloc.chunk_end = addr + size;
 		ho_alloc.saved_return_pointer = caller;
 		ho_alloc.operation_timestamp = time(0);
-		string imagename = getCModuleImageNameByAddress(caller);
+		string imagename = getModuleImageNameByAddress(caller);
 		ho_alloc.srp_imagename = imagename;
 
 		ho_alloc.save_to_log();
@@ -477,7 +477,7 @@ VOID CaptureVirtualAllocAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 	ho_alloc.chunk_end = addr + size;
 	ho_alloc.saved_return_pointer = caller;
 	ho_alloc.operation_timestamp = time(0);
-	string imagename = getCModuleImageNameByAddress(caller);
+	string imagename = getModuleImageNameByAddress(caller);
 	ho_alloc.srp_imagename = imagename;
 
 	ho_alloc.save_to_log();
@@ -503,7 +503,7 @@ VOID CaptureRtlFreeHeapBefore(ADDRINT addr, ADDRINT caller)
 		ho_free.saved_return_pointer = caller;
 		ho_free.operation_timestamp = time(0);
 
-		string imagename = getCModuleImageNameByAddress(caller);
+		string imagename = getModuleImageNameByAddress(caller);
 
 
 		// see if we can get size from previous allocation
