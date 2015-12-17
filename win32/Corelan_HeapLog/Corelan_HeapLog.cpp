@@ -64,6 +64,12 @@ std::map<ADDRINT,WINDOWS::DWORD> chunksizes;	// used to collect info from all th
 PIN_LOCK lock;
 int nrLogEntries = 0;
 
+/* ================================================================== */
+// Function declarations 
+/* ================================================================== */
+
+void saveToLog(FILE*, const char * fmt, ...);
+
 
 /* ================================================================== */
 // Classes 
@@ -95,23 +101,46 @@ private:
 
 vector<CLogEntry> arrOutputBuffer;
 
-// declare some important funcs
-void SaveToLog(FILE*, const char * fmt, ...);
 
-class ModuleImage
+
+class CModuleImage
 {
 public:
-	string ImageName;
-	ADDRINT ImageBase;
-	ADDRINT ImageEnd;
+	// constructor
+	CModuleImage(IMG thisimage)
+	{
+		ImageName = IMG_Name(thisimage);
+		ImageEnd = IMG_HighAddress(thisimage);
+		ImageBase = IMG_LowAddress(thisimage);
+	}
 
 	void save_to_log()
 	{
-		SaveToLog(LogFile, "** Module %s loaded at 0x%p**\n", ImageName, ImageBase);
+		saveToLog(LogFile, "** Module loaded at 0x%p - 0x%p : %s **\n", ImageBase, ImageEnd, ImageName);
 	}
+
+	string getName()
+	{
+		return ImageName;
+	}
+
+	ADDRINT getBase()
+	{
+		return ImageBase;
+	}
+
+	ADDRINT getEnd()
+	{
+		return ImageEnd;
+	}
+
+private:
+	string ImageName;
+	ADDRINT ImageBase;
+	ADDRINT ImageEnd;
 };
 
-class HeapOperation
+class CHeapOperation
 {
 public:
 	string operation_type;
@@ -142,19 +171,19 @@ public:
 		{
 			if (operation_type ==  "rtlallocateheap")
 			{
-				SaveToLog(LogFile, "PID: %u | %s | alloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+				saveToLog(LogFile, "PID: %u | %s | alloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 			}
 			else if (operation_type ==  "rtlreallocateheap")
 			{
-				SaveToLog(LogFile, "PID: %u | %s | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+				saveToLog(LogFile, "PID: %u | %s | realloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 			}
 			else if (operation_type ==  "virtualalloc")
 			{
-				SaveToLog(LogFile, "PID: %u | %s | virtualalloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
+				saveToLog(LogFile, "PID: %u | %s | virtualalloc(0x%p) at 0x%p from 0x%p (%s)\n",currentpid,ascii_time,chunk_size,chunk_start,saved_return_pointer,srp_imagename);
 			}
 			else if (operation_type == "rtlfreeheap")
 			{
-				SaveToLog(LogFile, "PID: %u | %s | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid,ascii_time, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
+				saveToLog(LogFile, "PID: %u | %s | free(0x%p) from 0x%p (size was 0x%p) (%s)\n",currentpid,ascii_time, chunk_start,saved_return_pointer,chunk_size,srp_imagename);
 			}
 		}
 	}
@@ -162,8 +191,8 @@ public:
 };
 
 
-vector<HeapOperation> arrAllOperations;
-vector<ModuleImage> arrLoadedModules;
+vector<CHeapOperation> arrAllOperations;
+vector<CModuleImage> arrLoadedModules;
 
 
 /* ===================================================================== */
@@ -207,6 +236,7 @@ void dumpBufferToFile()
 		string entry = le.getEntry();
 		fprintf(LogF, "%s", entry);
 	}
+	// I won't fflush the output buffer here, for performance reasons.
 	arrOutputBuffer.clear();
 	PIN_UnlockClient();
 }
@@ -214,8 +244,9 @@ void dumpBufferToFile()
 
 void CloseLogFile()
 {
-	// dump remaining log entries to file, if any
+	// first dump remaining log entries to file, if any
 	dumpBufferToFile();
+	// wrap up
 	std::fprintf(ExceptionLogFile,"\nClosing log file for PID %u\n", PIN_GetPid());
 	std::fprintf(LogFile, "############## EOF\n");
 	fflush(LogFile);
@@ -259,19 +290,14 @@ WINDOWS::DWORD findSize(ADDRINT address)
 	return 0;
 }
 
-
-ModuleImage addModuleToArray(IMG img)
+void saveModToArray(CModuleImage& modimage)
 {
-	ModuleImage modimage;
-	modimage.ImageName = IMG_Name(img);
-	modimage.ImageEnd = IMG_HighAddress(img);
-	modimage.ImageBase = IMG_LowAddress(img);
+	// saving, just in case I want to do something with it later
 	arrLoadedModules.push_back(modimage);
-	return modimage;
 }
 
 
-string getModuleImageNameByAddress(ADDRINT address)
+string getCModuleImageNameByAddress(ADDRINT address)
 {
 	string returnval = "";
 	IMG theimage;
@@ -294,7 +320,7 @@ string getAddressInfo(ADDRINT address)
 	if (address > 0)
 	{
 		// check if address belongs to module or is part of heap
-		modulename = getModuleImageNameByAddress(address);
+		modulename = getCModuleImageNameByAddress(address);
 		if (!modulename.empty())
 		{
 			ss << "(" << modulename << ")";
@@ -303,7 +329,7 @@ string getAddressInfo(ADDRINT address)
 		else
 		{
 			ss << "";
-			for (HeapOperation op : arrAllOperations)
+			for (CHeapOperation op : arrAllOperations)
 			{
 				if (op.chunk_start <= address && address <= op.chunk_end)
 				{
@@ -318,7 +344,7 @@ string getAddressInfo(ADDRINT address)
 
 
 // wrapper to either write output to LogFile directly, or to buffer it first
-void SaveToLog(FILE* Log, const char * fmt, ...)
+void saveToLog(FILE* Log, const char * fmt, ...)
 {
 	va_list args;
 	// convert to string first
@@ -371,14 +397,14 @@ VOID CaptureRtlAllocateHeapAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 		int size = (int) PIN_GetThreadData(alloc_key, tid);
 		
 		// create new object
-		HeapOperation ho_alloc;
+		CHeapOperation ho_alloc;
 		ho_alloc.operation_type = "rtlallocateheap";
 		ho_alloc.chunk_start = addr;
 		ho_alloc.chunk_size = size;
 		ho_alloc.chunk_end = addr + size;
 		ho_alloc.saved_return_pointer = caller;
 		ho_alloc.operation_timestamp = time(0);
-		string imagename = getModuleImageNameByAddress(caller);
+		string imagename = getCModuleImageNameByAddress(caller);
 		ho_alloc.srp_imagename = imagename;
 
 		ho_alloc.save_to_log();
@@ -408,14 +434,14 @@ VOID CaptureRtlReAllocateHeapAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 		int size = (int) PIN_GetThreadData(alloc_key, tid);
 		
 		// create new object
-		HeapOperation ho_alloc;
+		CHeapOperation ho_alloc;
 		ho_alloc.operation_type = "rtlreallocateheap";
 		ho_alloc.chunk_start = addr;
 		ho_alloc.chunk_size = size;
 		ho_alloc.chunk_end = addr + size;
 		ho_alloc.saved_return_pointer = caller;
 		ho_alloc.operation_timestamp = time(0);
-		string imagename = getModuleImageNameByAddress(caller);
+		string imagename = getCModuleImageNameByAddress(caller);
 		ho_alloc.srp_imagename = imagename;
 
 		ho_alloc.save_to_log();
@@ -444,14 +470,14 @@ VOID CaptureVirtualAllocAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 	int size = (int) PIN_GetThreadData(alloc_key, tid);
 		
 	// create new object
-	HeapOperation ho_alloc;
+	CHeapOperation ho_alloc;
 	ho_alloc.operation_type = "virtualalloc";
 	ho_alloc.chunk_start = addr;
 	ho_alloc.chunk_size = size;
 	ho_alloc.chunk_end = addr + size;
 	ho_alloc.saved_return_pointer = caller;
 	ho_alloc.operation_timestamp = time(0);
-	string imagename = getModuleImageNameByAddress(caller);
+	string imagename = getCModuleImageNameByAddress(caller);
 	ho_alloc.srp_imagename = imagename;
 
 	ho_alloc.save_to_log();
@@ -471,13 +497,13 @@ VOID CaptureRtlFreeHeapBefore(ADDRINT addr, ADDRINT caller)
 	if (addr > 0x1000 && addr < 0x7fffffff)
 	{
 		// create new object
-		HeapOperation ho_free;
+		CHeapOperation ho_free;
 		ho_free.operation_type = "rtlfreeheap";
 		ho_free.chunk_start = addr;
 		ho_free.saved_return_pointer = caller;
 		ho_free.operation_timestamp = time(0);
 
-		string imagename = getModuleImageNameByAddress(caller);
+		string imagename = getCModuleImageNameByAddress(caller);
 
 
 		// see if we can get size from previous allocation
@@ -507,8 +533,8 @@ VOID AddInstrumentation(IMG img, VOID *v)
 	// this instrumentation routine gets executed when an image is loaded
 
 	// first, add image information to global array
-	ModuleImage thisimage;
-	thisimage = addModuleToArray(img);
+	CModuleImage thisimage(img);
+	saveModToArray(thisimage);
 	thisimage.save_to_log();
 
 	// next, walk through the symbols in the symbol table to see if it contains the Heap related functions that we want to monitor
@@ -529,7 +555,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(allocRtn);
 
-				SaveToLog(LogFile,"Adding instrumentation for RtlAllocateHeap (0x%p)\n", allocRtn);
+				saveToLog(LogFile,"Adding instrumentation for RtlAllocateHeap (0x%p)\n", allocRtn);
                 
 				RTN_InsertCall(allocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlAllocateHeapBefore,
 					IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
@@ -555,7 +581,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(reallocRtn);
 
-				SaveToLog(LogFile,"Adding instrumentation for RtlReAllocateHeap (0x%p)\n", reallocRtn);
+				saveToLog(LogFile,"Adding instrumentation for RtlReAllocateHeap (0x%p)\n", reallocRtn);
 				// HeapHandle
 				// Flags
 				// MemoryPointer
@@ -584,7 +610,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(vaallocRtn);
 
-				SaveToLog(LogFile,"Adding instrumentation for VirtualAlloc (0x%p)\n", vaallocRtn);
+				saveToLog(LogFile,"Adding instrumentation for VirtualAlloc (0x%p)\n", vaallocRtn);
 				// lpAddress
 				// dwSize
 				// flAllocationType
@@ -611,7 +637,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 			{
 				RTN_Open(freeRtn);
 
-				SaveToLog(LogFile,"Adding instrumentation for RtlFreeHeap (0x%p)\n", freeRtn);
+				saveToLog(LogFile,"Adding instrumentation for RtlFreeHeap (0x%p)\n", freeRtn);
                 
 				RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlFreeHeapBefore,
 					IARG_FUNCARG_ENTRYPOINT_VALUE, 2,	// address
@@ -673,10 +699,10 @@ VOID OnException(THREADID threadIndex, CONTEXT_CHANGE_REASON reason, const CONTE
 
 	UINT32 exceptionCode = info;
 	ADDRINT	address = PIN_GetContextReg(ctxtFrom, REG_INST_PTR);
-	SaveToLog(LogFile, "\n\n*** Exception at 0x%p, code 0x%x ***\n", address, exceptionCode);
+	saveToLog(LogFile, "\n\n*** Exception at 0x%p, code 0x%x ***\n", address, exceptionCode);
 	if ((exceptionCode >= 0xc0000000) && (exceptionCode <= 0xcfffffff))
 	{
-		SaveToLog(LogFile, "%s\n", "For more info about this exception, see exception log file ***");
+		saveToLog(LogFile, "%s\n", "For more info about this exception, see exception log file ***");
 		LogContext(ctxtFrom);
 		CloseExceptionLogFile();
 		CloseLogFile();
@@ -687,7 +713,7 @@ VOID OnException(THREADID threadIndex, CONTEXT_CHANGE_REASON reason, const CONTE
 
 BOOL FollowChild(CHILD_PROCESS childProcess, VOID * userData)
 {
-	SaveToLog(LogFile, "\n*******************************\nCreating child process from parent PID %u\n*******************************\n\n", PIN_GetPid());
+	saveToLog(LogFile, "\n*******************************\nCreating child process from parent PID %u\n*******************************\n\n", PIN_GetPid());
 	return true;
 }
 
@@ -695,7 +721,7 @@ BOOL FollowChild(CHILD_PROCESS childProcess, VOID * userData)
 
 VOID Fini(INT32 code, VOID *v)
 {
-	SaveToLog(LogFile,"\n\nNumber of heap operations logged: %d\n",arrAllOperations.size());
+	saveToLog(LogFile,"\n\nNumber of heap operations logged: %d\n",arrAllOperations.size());
 	CloseLogFile();
 }
 
@@ -703,14 +729,14 @@ VOID Fini(INT32 code, VOID *v)
 VOID ThreadStart(THREADID threadid, CONTEXT *ctxt, INT32 flags, VOID *v)
 {
     PIN_GetLock(&lock, threadid+1);
-	SaveToLog(LogFile, "PID: %u | New thread id %d\n",PIN_GetPid(),threadid); 
+	saveToLog(LogFile, "PID: %u | New thread id %d\n",PIN_GetPid(),threadid); 
     PIN_ReleaseLock(&lock);
 }
 
 VOID ThreadStop(THREADID threadid, const CONTEXT *ctxt, INT32 code, VOID *v)
 {
     PIN_GetLock(&lock, threadid+1);
-    SaveToLog(LogFile, "PID: %u | Closed thread id %d\n",PIN_GetPid(),threadid);
+    saveToLog(LogFile, "PID: %u | Closed thread id %d\n",PIN_GetPid(),threadid);
     PIN_ReleaseLock(&lock);
 }
 
@@ -750,7 +776,7 @@ int main(int argc, char *argv[])
 	LogFile = fopen(fileName.c_str(),openMode);
 	ExceptionLogFile = fopen("corelan_heaplog_exception.log","a+");
 
-	SaveToLog(LogFile, "Instrumentation started\n");
+	saveToLog(LogFile, "Instrumentation started\n");
 
 	// load symbols. 
 	PIN_InitSymbols();
@@ -762,14 +788,14 @@ int main(int argc, char *argv[])
 	std::string ascii_time;
 	ascii_time = getCurrentDateTimeStr();
 
-	SaveToLog(LogFile, "==========================================\n");
-	SaveToLog(LogFile, "Date & time: %s\n", ascii_time);
-	SaveToLog(LogFile,"Adding output for PID %u into this file\n", currentpid);
+	saveToLog(LogFile, "==========================================\n");
+	saveToLog(LogFile, "Date & time: %s\n", ascii_time);
+	saveToLog(LogFile,"Adding output for PID %u into this file\n", currentpid);
 
 	
-	if (LogAlloc) 	SaveToLog(LogFile, "Logging heap alloc: YES\n"); else SaveToLog(LogFile, "Logging heap alloc: NO\n");
-	if (LogFree) 	SaveToLog(LogFile, "Logging heap free: YES\n"); else SaveToLog(LogFile, "Logging heap free: NO\n");
-	if (BufferOutput) SaveToLog(LogFile, "Buffering output: YES\n"); else SaveToLog(LogFile, "Buffering output: NO\n");
+	if (LogAlloc) 	saveToLog(LogFile, "Logging heap alloc: YES\n"); else saveToLog(LogFile, "Logging heap alloc: NO\n");
+	if (LogFree) 	saveToLog(LogFile, "Logging heap free: YES\n"); else saveToLog(LogFile, "Logging heap free: NO\n");
+	if (BufferOutput) saveToLog(LogFile, "Buffering output: YES\n"); else saveToLog(LogFile, "Buffering output: NO\n");
 	
 	// notify when following child process
 	PIN_AddFollowChildProcessFunction(FollowChild, 0);
@@ -793,7 +819,7 @@ int main(int argc, char *argv[])
 	//Handle exceptions
 	PIN_AddContextChangeFunction(OnException, 0);
 
-	SaveToLog(LogFile, "==========================================\n\n");
+	saveToLog(LogFile, "==========================================\n\n");
 
 	// Start the program, never returns
 	PIN_StartProgram();
