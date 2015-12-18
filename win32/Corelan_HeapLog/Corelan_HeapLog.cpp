@@ -533,6 +533,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 	// this instrumentation routine gets executed when an image is loaded
 
 	// first, add image information to global array
+	ADDRINT BaseAddy = IMG_LowAddress(img);
 	CModuleImage thisimage(img);
 	saveModToArray(thisimage);
 	thisimage.save_to_log();
@@ -555,7 +556,8 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(allocRtn);
 
-				saveToLog(LogFile,"Adding instrumentation for RtlAllocateHeap (0x%p)\n", allocRtn);
+				
+				saveToLog(LogFile,"Adding instrumentation for RtlAllocateHeap (0x%p)\n", (BaseAddy + SYM_Value(sym)));
                 
 				RTN_InsertCall(allocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlAllocateHeapBefore,
 					IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
@@ -581,7 +583,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(reallocRtn);
 
-				saveToLog(LogFile,"Adding instrumentation for RtlReAllocateHeap (0x%p)\n", reallocRtn);
+				saveToLog(LogFile,"Adding instrumentation for RtlReAllocateHeap (0x%p)\n", (BaseAddy + SYM_Value(sym)));
 				// HeapHandle
 				// Flags
 				// MemoryPointer
@@ -610,7 +612,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 
 				RTN_Open(vaallocRtn);
 
-				saveToLog(LogFile,"Adding instrumentation for VirtualAlloc (0x%p)\n", vaallocRtn);
+				saveToLog(LogFile,"Adding instrumentation for VirtualAlloc (0x%p)\n", (BaseAddy + SYM_Value(sym)));
 				// lpAddress
 				// dwSize
 				// flAllocationType
@@ -637,7 +639,7 @@ VOID AddInstrumentation(IMG img, VOID *v)
 			{
 				RTN_Open(freeRtn);
 
-				saveToLog(LogFile,"Adding instrumentation for RtlFreeHeap (0x%p)\n", freeRtn);
+				saveToLog(LogFile,"Adding instrumentation for RtlFreeHeap (0x%p)\n", (BaseAddy + SYM_Value(sym)));
                 
 				RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlFreeHeapBefore,
 					IARG_FUNCARG_ENTRYPOINT_VALUE, 2,	// address
