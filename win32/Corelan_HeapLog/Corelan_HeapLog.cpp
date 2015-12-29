@@ -61,6 +61,7 @@ TLS_KEY alloc_key;
 FILE* LogFile;
 FILE* ExceptionLogFile;
 std::map<ADDRINT,WINDOWS::DWORD> chunksizes;	// used to collect info from all threads
+std::map<ADDRINT, ADDRINT> mapFree;				// used to remember all frees and the SRP
 PIN_LOCK lock;
 int nrLogEntries = 0;
 
@@ -140,6 +141,7 @@ private:
 	ADDRINT ImageEnd;
 };
 
+
 class CHeapOperation
 {
 public:
@@ -151,9 +153,61 @@ public:
 	string srp_imagename;
 	time_t operation_timestamp;
 
+	// constructor, only used to initialize private var currentpid
+	CHeapOperation(bool is_this_an_alloc)
+	{
+		currentpid = PIN_GetPid();
+		isalloc = is_this_an_alloc;
+	}
+
+	// member functions to perform check on current address
+	void check_addy()
+	{
+		// it doesn't make sense to analyze if we're not tracking data in the first place
+		if (LogAlloc && LogFree)
+		{
+			// is this an alloc or free ?
+			if (isalloc)
+			{
+				// alloc
+				// try to remove item from freelist. Doesn't matter if item doesn't exist yet
+				try
+				{
+					mapFree.erase(chunk_start);
+				}
+				catch ( ... )
+				{
+					saveToLog(LogFile,"***Exception: Unable to remove element from free list\n");
+				}
+			}
+			else
+			{
+				// free
+				// if item is already in free list, then log this as a double free
+				if (mapFree.find( chunk_start ) != mapFree.end())
+				{
+					saveToLog(LogFile, "PID: %u >>> Double Free of 0x%p from 0x%p (%s) <<<\n", currentpid, chunk_start, saved_return_pointer, srp_imagename);
+				}
+				else
+				{
+					// add to map
+					try
+					{
+						mapFree[chunk_start] = saved_return_pointer;
+					}
+					catch ( ... )
+					{
+						saveToLog(LogFile, "***Exception: Unable to add freed chunk to list\n");
+					}
+				}
+			}
+		}
+	}
+
+
+	// member function to write info about current heap operation to log file
 	void save_to_log()
 	{
-		int currentpid = PIN_GetPid();
 		char * ascii_time;
 		if (ShowTimeStamp)
 		{
@@ -188,6 +242,9 @@ public:
 		}
 	}
 
+private:
+	int currentpid;
+	bool isalloc;
 };
 
 
@@ -397,7 +454,7 @@ VOID CaptureRtlAllocateHeapAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 		int size = (int) PIN_GetThreadData(alloc_key, tid);
 		
 		// create new object
-		CHeapOperation ho_alloc;
+		CHeapOperation ho_alloc(true);
 		ho_alloc.operation_type = "rtlallocateheap";
 		ho_alloc.chunk_start = addr;
 		ho_alloc.chunk_size = size;
@@ -408,6 +465,7 @@ VOID CaptureRtlAllocateHeapAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 		ho_alloc.srp_imagename = imagename;
 
 		ho_alloc.save_to_log();
+		ho_alloc.check_addy();
 
 		arrAllOperations.push_back(ho_alloc);
 		// add to map chunksizes (or update existing entry)
@@ -434,7 +492,7 @@ VOID CaptureRtlReAllocateHeapAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 		int size = (int) PIN_GetThreadData(alloc_key, tid);
 		
 		// create new object
-		CHeapOperation ho_alloc;
+		CHeapOperation ho_alloc(true);
 		ho_alloc.operation_type = "rtlreallocateheap";
 		ho_alloc.chunk_start = addr;
 		ho_alloc.chunk_size = size;
@@ -445,6 +503,7 @@ VOID CaptureRtlReAllocateHeapAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 		ho_alloc.srp_imagename = imagename;
 
 		ho_alloc.save_to_log();
+		ho_alloc.check_addy();
 
 		arrAllOperations.push_back(ho_alloc);
 		// add to map chunksizes
@@ -470,7 +529,7 @@ VOID CaptureVirtualAllocAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 	int size = (int) PIN_GetThreadData(alloc_key, tid);
 		
 	// create new object
-	CHeapOperation ho_alloc;
+	CHeapOperation ho_alloc(true);
 	ho_alloc.operation_type = "virtualalloc";
 	ho_alloc.chunk_start = addr;
 	ho_alloc.chunk_size = size;
@@ -481,12 +540,11 @@ VOID CaptureVirtualAllocAfter(THREADID tid, ADDRINT addr, ADDRINT caller)
 	ho_alloc.srp_imagename = imagename;
 
 	ho_alloc.save_to_log();
+	ho_alloc.check_addy();
 
 	arrAllOperations.push_back(ho_alloc);
 	// add to map chunksizes
 	chunksizes[addr] = size;
-
-
 }
 
 
@@ -497,7 +555,7 @@ VOID CaptureRtlFreeHeapBefore(ADDRINT addr, ADDRINT caller)
 	if (addr > 0x1000 && addr < 0x7fffffff)
 	{
 		// create new object
-		CHeapOperation ho_free;
+		CHeapOperation ho_free(false);
 		ho_free.operation_type = "rtlfreeheap";
 		ho_free.chunk_start = addr;
 		ho_free.saved_return_pointer = caller;
@@ -513,6 +571,7 @@ VOID CaptureRtlFreeHeapBefore(ADDRINT addr, ADDRINT caller)
 		ho_free.srp_imagename = imagename;
 
 		ho_free.save_to_log();
+		ho_free.check_addy();
 
 		arrAllOperations.push_back(ho_free);
 
@@ -521,6 +580,7 @@ VOID CaptureRtlFreeHeapBefore(ADDRINT addr, ADDRINT caller)
 
 	}
 }
+
 
 
 
@@ -547,85 +607,84 @@ VOID AddInstrumentation(IMG img, VOID *v)
 		//  Find the RtlAllocateHeap() function.
 		if (undFuncName == "RtlAllocateHeap" && LogAlloc)
 		{
-			RTN allocRtn = RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
+			RTN allocRtn = LEVEL_PINCLIENT::RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
             
-			if (RTN_Valid(allocRtn))
+			if (LEVEL_PINCLIENT::RTN_Valid(allocRtn))
 			{
 				// Instrument to capture allocation address and original function arguments
 				// at end of the RtlAllocateHeap function
 
-				RTN_Open(allocRtn);
+				LEVEL_PINCLIENT::RTN_Open(allocRtn);
 
-				
-				saveToLog(LogFile,"Adding instrumentation for RtlAllocateHeap (0x%p)\n", (BaseAddy + SYM_Value(sym)));
-                
-				RTN_InsertCall(allocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlAllocateHeapBefore,
+				saveToLog(LogFile,"Adding instrumentation for RtlAllocateHeap (0x%p) %s \n", (BaseAddy + SYM_Value(sym)), IMG_Name(img));
+                				
+				LEVEL_PINCLIENT::RTN_InsertCall(allocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlAllocateHeapBefore,
 					IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
 					IARG_FUNCARG_ENTRYPOINT_VALUE, 2, IARG_END);
 
 				// return value is the address that has been allocated
-				RTN_InsertCall(allocRtn, IPOINT_AFTER, (AFUNPTR) &CaptureRtlAllocateHeapAfter,
+				LEVEL_PINCLIENT::RTN_InsertCall(allocRtn, IPOINT_AFTER, (AFUNPTR) &CaptureRtlAllocateHeapAfter,
 					IARG_THREAD_ID, IARG_FUNCRET_EXITPOINT_VALUE, IARG_G_ARG0_CALLER, IARG_END);
 
-				RTN_Close(allocRtn);
+				LEVEL_PINCLIENT::RTN_Close(allocRtn);
 			}
 		}
 
 		//  Find the RtlReAllocateHeap() function.
 		else if (undFuncName == "RtlReAllocateHeap" && LogAlloc)
 		{
-			RTN reallocRtn = RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
+			RTN reallocRtn = LEVEL_PINCLIENT::RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
             
-			if (RTN_Valid(reallocRtn))
+			if (LEVEL_PINCLIENT::RTN_Valid(reallocRtn))
 			{
 				// Instrument to capture allocation address and original function arguments
 				// at end of the RtlAllocateHeap function
 
-				RTN_Open(reallocRtn);
+				LEVEL_PINCLIENT::RTN_Open(reallocRtn);
 
-				saveToLog(LogFile,"Adding instrumentation for RtlReAllocateHeap (0x%p)\n", (BaseAddy + SYM_Value(sym)));
+				saveToLog(LogFile,"Adding instrumentation for RtlReAllocateHeap (0x%p) %s \n", (BaseAddy + SYM_Value(sym)), IMG_Name(img));
 				// HeapHandle
 				// Flags
 				// MemoryPointer
 				// Size
-				RTN_InsertCall(reallocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlReAllocateHeapBefore,
+				LEVEL_PINCLIENT::RTN_InsertCall(reallocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlReAllocateHeapBefore,
 					IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 2,
 					IARG_FUNCARG_ENTRYPOINT_VALUE, 3, IARG_END);
 
 				// return value is the address that has been allocated
-				RTN_InsertCall(reallocRtn, IPOINT_AFTER, (AFUNPTR) &CaptureRtlReAllocateHeapAfter,
+				LEVEL_PINCLIENT::RTN_InsertCall(reallocRtn, IPOINT_AFTER, (AFUNPTR) &CaptureRtlReAllocateHeapAfter,
 					IARG_THREAD_ID, IARG_FUNCRET_EXITPOINT_VALUE, IARG_G_ARG0_CALLER, IARG_END);
 
-				RTN_Close(reallocRtn);
+				LEVEL_PINCLIENT::RTN_Close(reallocRtn);
 			}
 		}
 
 		//  Find the VirtualAlloc() function.
 		else if (undFuncName == "VirtualAlloc" && LogAlloc)
 		{
-			RTN vaallocRtn = RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
+			RTN vaallocRtn = LEVEL_PINCLIENT::RTN_FindByAddress(IMG_LowAddress(img) + SYM_Value(sym));
             
-			if (RTN_Valid(vaallocRtn))
+			if (LEVEL_PINCLIENT::RTN_Valid(vaallocRtn))
 			{
 				// Instrument to capture allocation address and original function arguments
 				// at end of the VirtualAlloc function
 
-				RTN_Open(vaallocRtn);
+				LEVEL_PINCLIENT::RTN_Open(vaallocRtn);
 
-				saveToLog(LogFile,"Adding instrumentation for VirtualAlloc (0x%p)\n", (BaseAddy + SYM_Value(sym)));
+				saveToLog(LogFile,"Adding instrumentation for VirtualAlloc (0x%p) %s\n", (BaseAddy + SYM_Value(sym)), IMG_Name(img));
 				// lpAddress
 				// dwSize
 				// flAllocationType
 				// flProtect
-				RTN_InsertCall(vaallocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureVirtualAllocBefore,
+				LEVEL_PINCLIENT::RTN_InsertCall(vaallocRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureVirtualAllocBefore,
 					IARG_THREAD_ID, IARG_FUNCARG_ENTRYPOINT_VALUE, 1,
 					IARG_FUNCARG_ENTRYPOINT_VALUE, 3, IARG_END);
 
 				// return value is the address that has been allocated
-				RTN_InsertCall(vaallocRtn, IPOINT_AFTER, (AFUNPTR) &CaptureVirtualAllocAfter,
+				LEVEL_PINCLIENT::RTN_InsertCall(vaallocRtn, IPOINT_AFTER, (AFUNPTR) &CaptureVirtualAllocAfter,
 					IARG_THREAD_ID, IARG_FUNCRET_EXITPOINT_VALUE, IARG_G_ARG0_CALLER, IARG_END);
 
-				RTN_Close(vaallocRtn);
+				LEVEL_PINCLIENT::RTN_Close(vaallocRtn);
 			}
 		}
 
@@ -637,19 +696,18 @@ VOID AddInstrumentation(IMG img, VOID *v)
             
 			if (RTN_Valid(freeRtn))
 			{
-				RTN_Open(freeRtn);
+				LEVEL_PINCLIENT::RTN_Open(freeRtn);
 
-				saveToLog(LogFile,"Adding instrumentation for RtlFreeHeap (0x%p)\n", (BaseAddy + SYM_Value(sym)));
+				saveToLog(LogFile,"Adding instrumentation for RtlFreeHeap (0x%p) %s\n", (BaseAddy + SYM_Value(sym)), IMG_Name(img));
                 
-				RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlFreeHeapBefore,
+				LEVEL_PINCLIENT::RTN_InsertCall(freeRtn, IPOINT_BEFORE, (AFUNPTR) &CaptureRtlFreeHeapBefore,
 					IARG_FUNCARG_ENTRYPOINT_VALUE, 2,	// address
 					IARG_G_ARG0_CALLER,					// saved return pointer
 					IARG_END);
 
-				RTN_Close(freeRtn);
+				LEVEL_PINCLIENT::RTN_Close(freeRtn);
 			}
 		}
-
 
 	}
 }

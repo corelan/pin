@@ -66,6 +66,7 @@ Timestamp is disabled by default (as it may slow down the process a tiny little 
 The splitfiles option is disabled by default.<br>
 The silent option is disabled by default. Enabling this option will speed up the process (as the cost of writing entries to file will be gone).  Of course, this only makes sense if you're only interested in seeing the exception context.<br>
 The bufferoutput option is enabled by default.<br>
+If you are logging alloc and free operations, then this pintool will attempt to detect double free situations.<br>
 
 The pintool *should* be capable of instrumenting child processes, provided that you have specified the `-follow-execv` pin command line option.
 
